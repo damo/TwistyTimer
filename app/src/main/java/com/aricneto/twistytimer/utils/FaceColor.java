@@ -1,11 +1,13 @@
 package com.aricneto.twistytimer.utils;
 
-import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.preference.PreferenceManager;
+import android.support.annotation.ColorInt;
+import android.support.annotation.IdRes;
+import android.support.annotation.NonNull;
+import android.support.annotation.StringRes;
 
 import com.aricneto.twistify.R;
-import com.aricneto.twistytimer.TwistyTimer;
+import com.aricneto.twistytimer.items.PuzzleType;
 
 import java.util.Locale;
 
@@ -17,24 +19,23 @@ import java.util.Locale;
  * @author damo
  */
 public enum FaceColor {
-    /** The color of the top face. */
-    // NOTE: Shared preference key "cubeTop" (not "cubeUp") predates this code and cannot change.
-    UP   ("cubeTop",   R.id.top,   0xffffff), // white
+    /** The color of the upper face. */
+    UP   (R.string.pk_cube_color_up,    R.id.up,    0xffffff), // white
 
     /** The color of the bottom face. */
-    DOWN ("cubeDown",  R.id.down,  0xfdd835), // yellow
+    DOWN (R.string.pk_cube_color_down,  R.id.down,  0xfdd835), // yellow
 
     /** The color of the left face. */
-    LEFT ("cubeLeft",  R.id.left,  0xff8b24), // orange
+    LEFT (R.string.pk_cube_color_left,  R.id.left,  0xff8b24), // orange
 
     /** The color of the right face. */
-    RIGHT("cubeRight", R.id.right, 0xec0000), // red
+    RIGHT(R.string.pk_cube_color_right, R.id.right, 0xec0000), // red
 
     /** The color of the front face. */
-    FRONT("cubeFront", R.id.front, 0x02d040), // green
+    FRONT(R.string.pk_cube_color_front, R.id.front, 0x02d040), // green
 
     /** The color of the back face. */
-    BACK ("cubeBack",  R.id.back,  0x304ffe); // blue
+    BACK (R.string.pk_cube_color_back,  R.id.back,  0x304ffe); // blue
 
     /**
      * The faces of a "Skewb" puzzle in the order in which their TNoodle default colors match the
@@ -55,7 +56,7 @@ public enum FaceColor {
      * the default colors of an NxNxN cube, where the latter are ordered by the values of this enum.
      */
     // See https://github.com/cubing/tnoodle/blob/master/scrambles/src/puzzle/SquareOnePuzzle.java
-    private static final FaceColor[] SQUARE1_FACE_COLOR_MAP = {
+    private static final FaceColor[] SQ_1_FACE_COLOR_MAP = {
             DOWN,  // white  (Square-1 DOWN  has same default color as NxNxN cube UP)
             UP,    // yellow (Square-1 UP    has same default color as NxNxN cube DOWN)
             BACK,  // orange (Square-1 BACK  has same default color as NxNxN cube LEFT)
@@ -65,14 +66,17 @@ public enum FaceColor {
     };
 
     /**
-     * The key used to access the custom color value for this face in the shared preferences.
+     * The string resource ID for the key used to access the custom color value for this face in
+     * the shared preferences.
      */
-    private final String mColorKey;
+    @StringRes
+    private final int mColorKeyResID;
 
     /**
      * The resource ID of the view used to present this face color when customising the color
      * through the user interface.
      */
+    @IdRes
     private final int mViewID;
 
     /**
@@ -84,11 +88,15 @@ public enum FaceColor {
     /**
      * Creates a new enum value for the color of a face.
      *
-     * @param colorKey     The key to the custom color value in the shared preferences.
-     * @param defaultColor The default color to use for the face if there is no custom color.
+     * @param colorKeyResID
+     *     The string resource ID for the key to the custom color value in the shared preferences.
+     * @param viewID
+     *     The ID of the view used to present this face color when customising the color in the UI.
+     * @param defaultColor
+     *     The default color to use for the face if there is no custom color.
      */
-    FaceColor(String colorKey, int viewID, int defaultColor) {
-        mColorKey = colorKey;
+    FaceColor(@StringRes int colorKeyResID, @IdRes int viewID, @ColorInt int defaultColor) {
+        mColorKeyResID = colorKeyResID;
         mViewID = viewID;
         mDefaultHexColor = toHexColor(defaultColor);
     }
@@ -101,7 +109,7 @@ public enum FaceColor {
      * @param color The color value to be formatted as a hex string.
      * @return The color hex-string.
      */
-    private static String toHexColor(int color) {
+    private static String toHexColor(@ColorInt int color) {
         return String.format(Locale.US, "%06X", color);
     }
 
@@ -113,7 +121,7 @@ public enum FaceColor {
      *
      * @return The face color for that view, or {@code FaceColor.UP} if no match is found.
      */
-    public static FaceColor forViewID(int viewID) {
+    public static FaceColor forViewID(@IdRes int viewID) {
         // The use cases for this method do not require anything too fancy. A linear search is OK.
         for (FaceColor faceColor : FaceColor.values()) {
             if (faceColor.getViewID() == viewID) {
@@ -130,6 +138,7 @@ public enum FaceColor {
      *
      * @return The view resource ID.
      */
+    @IdRes
     public int getViewID() {
         return mViewID;
     }
@@ -143,8 +152,7 @@ public enum FaceColor {
      * @return The hex-string color value for this face.
      */
     public String getHexColor() {
-        return PreferenceManager.getDefaultSharedPreferences(TwistyTimer.getAppContext())
-                .getString(mColorKey, mDefaultHexColor);
+        return Prefs.getStringRawDefault(mColorKeyResID, mDefaultHexColor);
     }
 
     /**
@@ -153,6 +161,7 @@ public enum FaceColor {
      *
      * @return The integer color value for this face.
      */
+    @ColorInt
     public int getColor() {
         return Color.parseColor('#' + getHexColor());
     }
@@ -163,9 +172,8 @@ public enum FaceColor {
      *
      * @param color The new color value for this face.
      */
-    public void putColor(int color) {
-        PreferenceManager.getDefaultSharedPreferences(TwistyTimer.getAppContext())
-                .edit().putString(mColorKey, toHexColor(color)).apply();
+    public void putColor(@ColorInt int color) {
+        Prefs.edit().putString(mColorKeyResID, toHexColor(color)).apply();
     }
 
     /**
@@ -173,8 +181,7 @@ public enum FaceColor {
      * custom color value was previously saved to the shared preferences, it will be deleted.
      */
     public void resetColor() {
-        PreferenceManager.getDefaultSharedPreferences(TwistyTimer.getAppContext())
-                .edit().remove(mColorKey).apply();
+        Prefs.edit().remove(mColorKeyResID).apply();
     }
 
     /**
@@ -182,13 +189,12 @@ public enum FaceColor {
      * face. Any custom color values previously saved to the shared preferences will be deleted.
      */
     public static void resetAllColors() {
-        final SharedPreferences.Editor editor
-                = PreferenceManager.getDefaultSharedPreferences(TwistyTimer.getAppContext()).edit();
+        final Prefs.Editor editor = Prefs.edit();
 
         // Do this all in one "transaction", as it will be a bit more efficient than calling
         // "resetColor" for each face.
         for (FaceColor faceColor : FaceColor.values()) {
-            editor.remove(faceColor.mColorKey);
+            editor.remove(faceColor.mColorKeyResID);
         }
 
         editor.apply();
@@ -212,7 +218,7 @@ public enum FaceColor {
      * color to a "Skewb" or "Square-1" faces, the color should be applied not to the face that is
      * identified by the custom color key, but to the face whose default color matched the default
      * color of the NxNxN cube puzzles. For example, if this is {@code FaceColor.FRONT}, then this
-     * method will return {@code FaceColor.LEFT} for the puzzle type {@link PuzzleUtils#TYPE_SKEWB},
+     * method will return {@code FaceColor.LEFT} for the puzzle type {@link PuzzleType#TYPE_SKEWB},
      * as the default color of the front face of an NxNxN cube puzzle (green) is the same as the
      * default color of the left face of a "Skewb" puzzle.
      * </p>
@@ -225,12 +231,12 @@ public enum FaceColor {
      *     an NxNxN cube puzzle. If there is no known mapping between faces, this face will be
      *     returned.
      */
-    public FaceColor toCubeFaceWithSameColor(String puzzleType) {
+    public FaceColor toCubeFaceWithSameColor(@NonNull PuzzleType puzzleType) {
         switch (puzzleType) {
-            case PuzzleUtils.TYPE_SKEWB:
+            case TYPE_SKEWB:
                 return SKEWB_FACE_COLOR_MAP[ordinal()];
-            case PuzzleUtils.TYPE_SQUARE1:
-                return SQUARE1_FACE_COLOR_MAP[ordinal()];
+            case TYPE_SQ_1:
+                return SQ_1_FACE_COLOR_MAP[ordinal()];
             default:
                 return this;
         }

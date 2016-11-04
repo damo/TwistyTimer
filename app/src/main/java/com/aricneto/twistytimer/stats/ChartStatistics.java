@@ -1,7 +1,11 @@
 package com.aricneto.twistytimer.stats;
 
+import android.support.annotation.NonNull;
+
+import com.aricneto.twistytimer.utils.MainState;
 import com.aricneto.twistytimer.utils.OffsetValuesLineChartRenderer;
-import com.aricneto.twistytimer.utils.PuzzleUtils;
+import com.aricneto.twistytimer.utils.TimeUtils;
+import com.aricneto.twistytimer.utils.WCAMath;
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.Legend;
 import com.github.mikephil.charting.components.LimitLine;
@@ -15,8 +19,8 @@ import org.joda.time.LocalDate;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 
-import static com.aricneto.twistytimer.stats.AverageCalculator.DNF;
-import static com.aricneto.twistytimer.stats.AverageCalculator.UNKNOWN;
+import static com.aricneto.twistytimer.stats.Statistics.TIME_DNF;
+import static com.aricneto.twistytimer.stats.Statistics.TIME_UNKNOWN;
 
 /**
  * A collector for solve times and related statistics (average times) to be presented in a chart.
@@ -100,25 +104,21 @@ public class ChartStatistics {
 
     /**
      * The collection of statistics that are required to support the calculation of any number of
-     * average-of-N lines in the graph.
+     * average-of-N lines in the graph. This also holds the {@link MainState} information.
      */
+    @NonNull
     private final Statistics mStatistics;
 
     /**
      * The styles that will be applied to the data sets of the chart.
      */
+    @NonNull
     private final ChartStyle mChartStyle;
 
     /**
      * The values of "N" for all "average-of-N" data sets to be charted.
      */
     private final int[] mNsOfAverages;
-
-    /**
-     * Indicates if the chart data is for the current session only or for all past and current
-     * sessions.
-     */
-    private final boolean mIsForCurrentSessionOnly;
 
     /**
      * The chart data for all solves and for each "average-of-N". The first data set (index zero)
@@ -181,11 +181,9 @@ public class ChartStatistics {
      *     the average values to be charted. Must not be {@code null}. Regardless of whether or not
      *     the chart data is for the current session or for all sessions, the statistics must be
      *     configured to collect only solve times for the current session (i.e.,
-     *     {@link Statistics#isForCurrentSessionOnly()} must return {@code true}).
-     * @param isForCurrentSessionOnly
-     *     {@code true} if the solve times to be charted are only those solves added in the current
-     *     sessions; or {@code false} if the solve times are only those solves added across all
-     *     sessions.
+     *     {@link Statistics#isForCurrentSessionOnly()} must return {@code true}). This object also
+     *     holds the main state information for the application. This defines the puzzle type,
+     *     solve category and history/session selection for the chart data.
      * @param chartStyle
      *     The styling information for the chart. This defines the labels and colors for the data
      *     sets, among other information.
@@ -195,8 +193,7 @@ public class ChartStatistics {
      * @throws IllegalStateException
      *     If there are more than three average-of-N lines to be graphed.
      */
-    private ChartStatistics(Statistics statistics, boolean isForCurrentSessionOnly,
-                            ChartStyle chartStyle)
+    private ChartStatistics(@NonNull Statistics statistics, @NonNull ChartStyle chartStyle)
                 throws IllegalArgumentException, IllegalStateException {
         if (!statistics.isForCurrentSessionOnly()) {
             // Enforcing this requirement means that there will be no excess clutter caused by
@@ -207,10 +204,9 @@ public class ChartStatistics {
             throw new IllegalArgumentException("Statistics must be for current session only.");
         }
 
-        mStatistics = statistics;
-        mChartStyle = chartStyle;
+        mStatistics   = statistics;
+        mChartStyle   = chartStyle;
         mNsOfAverages = statistics.getNsOfAverages();
-        mIsForCurrentSessionOnly = isForCurrentSessionOnly;
 
         // Unfortunately, the mean value can only be set in the "LimitLine" constructor, so save
         // the label and color of the line now (while a "Context" is available) and create the line
@@ -227,6 +223,31 @@ public class ChartStatistics {
 
         // Initialise and reset everything to a sane, empty state.
         reset();
+    }
+
+    /**
+     * Creates a new chart statistics instance that is a shallow copy of a given chart statistics
+     * instance. See the description of {@link Statistics#Statistics(Statistics)} for more details
+     * on the requirement for this copy operation and its limitations.
+     *
+     * @param chartStatisticsToCopy
+     *     The chart statistics to be copied to a new instance.
+     */
+    // "package" scope for use by "ChartStatisticsLoader".
+    ChartStatistics(@NonNull ChartStatistics chartStatisticsToCopy) {
+        mStatistics      = chartStatisticsToCopy.mStatistics;
+        mChartStyle      = chartStatisticsToCopy.mChartStyle;
+        mNsOfAverages    = chartStatisticsToCopy.mNsOfAverages;
+
+        mChartData       = chartStatisticsToCopy.mChartData;
+        mXIndex          = chartStatisticsToCopy.mXIndex;
+        mBestTime        = chartStatisticsToCopy.mBestTime;
+        mPrevEntryDay    = chartStatisticsToCopy.mPrevEntryDay;
+        mPrevEntryXValue = chartStatisticsToCopy.mPrevEntryXValue;
+        mXValueFormatter = chartStatisticsToCopy.mXValueFormatter;
+
+        mLimitLineLabel  = chartStatisticsToCopy.mLimitLineLabel;
+        mLimitLineColor  = chartStatisticsToCopy.mLimitLineColor;
     }
 
     /**
@@ -253,6 +274,16 @@ public class ChartStatistics {
                     mChartStyle.getAverageOfNLabelPrefix() + mNsOfAverages[nIndex],
                     mChartStyle.getExtraColor(nIndex));
         }
+    }
+
+    /**
+     * Gets the main state information for these chart statistics.
+     *
+     * @return The main state information.
+     */
+    @NonNull
+    public MainState getMainState() {
+        return mStatistics.getMainState();
     }
 
     /**
@@ -353,10 +384,24 @@ public class ChartStatistics {
     }
 
     /**
-     * Creates a new collector for chart data and statistics for the all-time chart. This includes
-     * data for all solve times across all past and current sessions and the running averages of 50
-     * and 100 consecutive times. These averages permit all but one solve to be a DNF solve.
+     * <p>
+     * Creates a new collector for chart data and statistics for the all-time or session chart.
+     * The choice of times included in the chart depends on the {@link MainState#isHistoryEnabled()}
+     * setting.
+     * </p>
+     * <p>
+     * The all-time chart includes data for all solve times across all past and current sessions
+     * and the running averages of 50 and 100 consecutive times. These averages permit all but one
+     * solve to be a DNF solve.
+     * </p>
+     * <p>
+     * The current session chart includes data for all solve times across only the current session
+     * and the running averages of 5 and 12 consecutive times. These averages permit no more than
+     * one solve to be a DNF solve.
+     * </p>
      *
+     * @param mainState
+     *     The main state information selection the solve times to be charted.
      * @param chartStyle
      *     The chart style information required for the data sets that will be populated with
      *     statistics.
@@ -364,41 +409,13 @@ public class ChartStatistics {
      * @return
      *     The collector for chart statistics.
      */
-    public static ChartStatistics newAllTimeChartStatistics(ChartStyle chartStyle) {
+    public static ChartStatistics newChartStatistics(
+            @NonNull MainState mainState, @NonNull ChartStyle chartStyle) {
         return new ChartStatistics(
-                Statistics.newAllTimeAveragesChartStatistics(), false, chartStyle);
-    }
-
-    /**
-     * Creates a new collector for chart data and statistics for the current session chart. This
-     * includes data for all solve times across only the current session and the running averages
-     * of 5 and 12 consecutive times. These averages permit no more than one solve to be a DNF
-     * solve.
-     *
-     * @param chartStyle
-     *     The chart style information required for the data sets that will be populated with
-     *     statistics.
-     *
-     * @return
-     *     The collector for chart statistics.
-     */
-    public static ChartStatistics newCurrentSessionChartStatistics(ChartStyle chartStyle) {
-        return new ChartStatistics(
-                Statistics.newCurrentSessionAveragesChartStatistics(), true, chartStyle);
-    }
-
-    /**
-     * Indicates if all of the charted times required are across the current session only. If
-     * only times for the current session are required, a more efficient approach may be taken to
-     * load the saved solve times.
-     *
-     * @return
-     *     {@code true} if all required chart data applies only to solve times for the current
-     *     session; or {@code false} if the data includes times across all past and current
-     *     sessions.
-     */
-    public boolean isForCurrentSessionOnly() {
-        return mIsForCurrentSessionOnly;
+                mainState.isHistoryEnabled()
+                        ? Statistics.newAllTimeAveragesChartStatistics(mainState)
+                        : Statistics.newCurrentSessionAveragesChartStatistics(mainState),
+                chartStyle);
     }
 
     /**
@@ -416,7 +433,7 @@ public class ChartStatistics {
 
         chart.getAxisLeft().removeAllLimitLines();
 
-        if (getMeanTime() != AverageCalculator.UNKNOWN) { // At least one non-DNF solve time?
+        if (getMeanTime() != TIME_UNKNOWN) { // At least one non-DNF solve time?
             final LimitLine ll = new LimitLine(getMeanTime() / 1_000f, mLimitLineLabel);
 
             ll.setLineColor(mLimitLineColor);
@@ -487,32 +504,36 @@ public class ChartStatistics {
 
     /**
      * Records a solve time. The time value should be in milliseconds. If the solve is a DNF,
-     * call {@link #addDNF} instead.
+     * call {@link #addDNF} instead. The time will be rounded as a "result" time in accordance
+     * with the WCA Regulations before being added to the chart.
      *
      * @param time
-     *     The solve time in milliseconds. Must be positive (though {@link AverageCalculator#DNF}
+     *     The solve time in milliseconds. Must be positive (though {@link Statistics#TIME_DNF}
      *     is also accepted).
      * @param date
      *     The date on which the solve time was recorded. The values should be in milliseconds
      *     since the Unix epoch time.
      *
      * @throws IllegalArgumentException
-     *     If the time is not greater than zero and is not {@code DNF}.
+     *     If the time is not greater than zero and is not {@code TIME_DNF}.
      */
     public void addTime(long time, long date) {
         boolean isEntryAdded = false;
 
-        // The value of "time" is validated by "Statistics.addTime".
+        // The value of "time" is validated (and rounded/truncated) by "Statistics.addTime".
         mStatistics.addTime(time, true); // May throw IAE.
 
-        if (time != DNF) {
-            mChartData.addEntry(new Entry(time / 1_000f, mXIndex), DS_ALL);
+        if (time != TIME_DNF) {
+            // For the solve time chart entry, round/truncate the times per WCA Regulations, too.
+            final long wcaTime = WCAMath.roundResult(time);
+
+            mChartData.addEntry(new Entry(wcaTime / 1_000f, mXIndex), DS_ALL);
             isEntryAdded = true;
 
             // Only update the recorded best time if it changes. The result should be a line that
             // traces (if lucky) a staircase descending from left to right (never rising).
-            if (time < mBestTime) {
-                mBestTime = time;
+            if (wcaTime < mBestTime) {
+                mBestTime = wcaTime;
                 mChartData.addEntry(new Entry(mBestTime / 1_000f, mXIndex), DS_BEST);
             }
         }
@@ -521,7 +542,7 @@ public class ChartStatistics {
             final AverageCalculator ac = mStatistics.getAverageOf(mNsOfAverages[nIndex], true);
             final long averageTime = ac.getCurrentAverage();
 
-            if (averageTime != AverageCalculator.DNF && averageTime != UNKNOWN) {
+            if (averageTime != TIME_DNF && averageTime != TIME_UNKNOWN) {
                 // AoN data sets start at "DS_AVG_0" and come in pairs. In each pair, the first is
                 // the data set for all AoN times for that "N" and the second is the data set for
                 // the single best AoN time for that "N".
@@ -578,8 +599,8 @@ public class ChartStatistics {
             mChartData.addXValue(xValue);
             mXIndex++;
         }
-        // If the new solve and all current averages were DNF or UNKNOWN, then no entry was added
-        // to the chart, so do not add any X-axis value and do not increment the X-index.
+        // If the new solve and all current averages were TIME_DNF or TIME_UNKNOWN, then no entry
+        // was added to the chart, so do not add any X-axis value and do not increment the X-index.
     }
 
     /**
@@ -591,7 +612,7 @@ public class ChartStatistics {
      */
     // This methods takes away any confusion about what time value represents a DNF.
     public void addDNF(long date) {
-        addTime(DNF, date);
+        addTime(TIME_DNF, date);
     }
 
     /**
@@ -601,7 +622,7 @@ public class ChartStatistics {
      *
      * @return
      *     The mean time of all non-DNF solves that were added for the chart statistics. The result
-     *     will be {@link AverageCalculator#UNKNOWN} if no times have been added, or if all added
+     *     will be {@link Statistics#TIME_UNKNOWN} if no times have been added, or if all added
      *     times were DNFs.
      */
     public long getMeanTime() {
@@ -616,7 +637,8 @@ public class ChartStatistics {
      */
     private float getLineWidth() {
         // Perhaps adjust this for the number of data points in the chart data.
-        return isForCurrentSessionOnly() ? LINE_WIDTH_THICK_DP : LINE_WIDTH_THIN_DP;
+        return mStatistics.getMainState().isHistoryEnabled()
+                ? LINE_WIDTH_THIN_DP : LINE_WIDTH_THICK_DP;
     }
 
     /**
@@ -627,8 +649,13 @@ public class ChartStatistics {
         @Override
         public String getFormattedValue(float value, Entry entry, int dataSetIndex,
                                         ViewPortHandler viewPortHandler) {
-            // "value" is in fractional seconds. Convert to whole milliseconds and format it.
-            return PuzzleUtils.convertTimeToString(Math.round(value * 1_000));
+            // "value" is in fractional seconds. Truncate to whole milliseconds, then round as a
+            // WCA "result" (usually truncated to whole 1/100ths), and format it as plain text.
+            // The initial truncation ensures that a time such as 24.2999 is correctly truncated
+            // per WCA Regulations to 24.29, the nearest (not greater) 0.01 s. If "value * 1000"
+            // were rounded (using "Math.round"), it would round 24.2999 s to 24,300 ms and then
+            // the WCA operation would not be correct, as it would yield 24.30 instead of 24.29.
+            return TimeUtils.formatTimeStatistic(WCAMath.roundResult((long) (value * 1_000)));
         }
     }
 }

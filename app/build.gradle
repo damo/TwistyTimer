@@ -6,7 +6,7 @@ android {
         }
     }
     compileSdkVersion 24
-    buildToolsVersion '23.0.3'
+    buildToolsVersion '24.0.3'
     defaultConfig {
         applicationId "com.aricneto.twistytimer"
         minSdkVersion 16
@@ -40,14 +40,13 @@ apply plugin: 'com.neenbedankt.android-apt'
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     compile project(':TNoodle')
-    compile project(':opencsv')
-    compile 'com.android.support:appcompat-v7:24.1.1'
-    compile 'com.android.support:support-v4:24.1.1'
-    compile 'com.android.support:cardview-v7:24.1.1'
-    compile 'com.android.support:recyclerview-v7:24.1.1'
-    compile 'com.android.support:gridlayout-v7:24.1.1'
-    compile 'com.android.support:design:24.1.1'
-    compile 'com.android.support:percent:24.1.1'
+    compile 'com.android.support:appcompat-v7:24.2.1'
+    compile 'com.android.support:support-v4:24.2.1'
+    compile 'com.android.support:cardview-v7:24.2.1'
+    compile 'com.android.support:recyclerview-v7:24.2.1'
+    compile 'com.android.support:gridlayout-v7:24.2.1'
+    compile 'com.android.support:design:24.2.1'
+    compile 'com.android.support:percent:24.2.1'
     // Butterknife ("apt" dependency is defined in root "build.gradle" script).
     compile 'com.jakewharton:butterknife:8.2.1'
     apt     'com.jakewharton:butterknife-compiler:8.2.1'
@@ -87,6 +86,14 @@ dependencies {
 
     compile 'com.github.iammert:MaterialIntroView:1.5.2'
 
+    // OpenCSV and its dependencies. "commons-logging" conflicts with Android's
+    // built-in version (according to warnings from the Gradle build), so it is
+    // excluded. It is a third-tier dependency and probably not necessary.
+    compile('com.opencsv:opencsv:3.8') {
+        exclude group: 'commons-logging', module: 'commons-logging'
+    }
+
+    // For project's own unit tests.
     testCompile 'junit:junit:4.12'
 }
 

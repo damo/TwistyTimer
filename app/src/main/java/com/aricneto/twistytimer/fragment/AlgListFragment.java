@@ -31,7 +31,7 @@ import static com.aricneto.twistytimer.utils.TTIntent.CATEGORY_ALG_DATA_CHANGES;
 import static com.aricneto.twistytimer.utils.TTIntent.registerReceiver;
 import static com.aricneto.twistytimer.utils.TTIntent.unregisterReceiver;
 
-public class AlgListFragment extends BaseFragment implements LoaderManager.LoaderCallbacks<Cursor> {
+public class AlgListFragment extends BaseMainFragment implements LoaderManager.LoaderCallbacks<Cursor> {
 
     private static final String KEY_SUBSET     = "subset";
 
@@ -86,7 +86,7 @@ public class AlgListFragment extends BaseFragment implements LoaderManager.Loade
 
         toolbar.setTitle(currentSubset);
 
-        setupToolbarForFragment(toolbar);
+        setUpToolbarForFragment(toolbar);
 
         setupRecyclerView();
 
@@ -144,7 +144,8 @@ public class AlgListFragment extends BaseFragment implements LoaderManager.Loade
                 new StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL);
 
         // Adapt to orientation
-        if (parentActivity.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT)
+        if (parentActivity.getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_PORTRAIT)
             recyclerView.setLayoutManager(gridLayoutManagerVertical);
         else
             recyclerView.setLayoutManager(gridLayoutManagerHorizontal);

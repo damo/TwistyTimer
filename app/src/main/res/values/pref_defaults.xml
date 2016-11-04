@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Default values for the preferences. The defaults are named similarly to the keys (in pref_keys.xml).
+The key for preference "X" is "pk_X" and the corresponding default value is "default_X".
+-->
+<resources>
+    <bool name="default_inspection_enabled">false</bool>
+    <integer name="default_inspection_time_s">15</integer> <!-- seconds -->
+
+    <bool name="default_hold_to_start_enabled">false</bool>
+    <bool name="default_start_cue_enabled">false</bool>
+
+    <bool name="default_tab_swiping_enabled">true</bool>
+    <bool name="default_show_clear_button">false</bool>
+
+    <bool name="default_scramble_enabled">true</bool>
+    <bool name="default_show_cross_hints">true</bool>
+    <bool name="default_show_x_cross_hints">false</bool>
+    <bool name="default_show_scramble_image">true</bool>
+    <integer name="default_scramble_text_scale_pc">100</integer>  <!-- % of base size -->
+    <integer name="default_scramble_image_scale_pc">100</integer> <!-- % of base size -->
+
+    <bool name="default_timer_bg_enabled">true</bool>
+    <bool name="default_show_hi_res_timer">true</bool>
+    <bool name="default_hide_time_while_running">false</bool>
+
+    <bool name="default_show_session_stats">true</bool>
+    <bool name="default_proclaim_best_time">true</bool>
+    <bool name="default_proclaim_worst_time">false</bool>
+
+    <bool name="default_advanced_timer_settings_enabled">false</bool>
+    <bool name="default_show_quick_actions">true</bool>
+    <bool name="default_large_quick_actions_enabled">false</bool>
+    <integer name="default_timer_display_scale_pc">100</integer>  <!-- % of base size -->
+    <integer name="default_timer_text_offset_px">0</integer>  <!-- pixels -->
+
+</resources>

@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
-import android.support.v4.app.LoaderManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.Loader;
 import android.util.Log;
@@ -24,7 +23,9 @@ import com.aricneto.twistytimer.stats.ChartStatisticsLoader;
 import com.aricneto.twistytimer.stats.ChartStyle;
 import com.aricneto.twistytimer.stats.Statistics;
 import com.aricneto.twistytimer.stats.StatisticsCache;
-import com.aricneto.twistytimer.utils.Wrapper;
+import com.aricneto.twistytimer.utils.LoggingLoaderCallbacks;
+import com.aricneto.twistytimer.utils.MainState;
+import com.aricneto.twistytimer.utils.TTIntent;
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.components.YAxis;
@@ -37,15 +38,15 @@ import butterknife.ButterKnife;
 import butterknife.Unbinder;
 import me.zhanghai.android.materialprogressbar.MaterialProgressBar;
 
-import static com.aricneto.twistytimer.stats.AverageCalculator.tr;
-import static com.aricneto.twistytimer.utils.PuzzleUtils.convertTimeToString;
+import static com.aricneto.twistytimer.utils.TimeUtils.formatTimeStatistic;
 
 /**
  * A simple {@link Fragment} subclass.
  * Use the {@link TimerGraphFragment#newInstance} factory method to
  * create an instance of this fragment.
  */
-public class TimerGraphFragment extends Fragment implements StatisticsCache.StatisticsObserver {
+public class TimerGraphFragment extends BaseMainFragment
+            implements StatisticsCache.StatisticsObserver {
     /**
      * Flag to enable debug logging for this class.
      */
@@ -56,20 +57,12 @@ public class TimerGraphFragment extends Fragment implements StatisticsCache.Stat
      */
     private static final String TAG = TimerGraphFragment.class.getSimpleName();
 
-    private static final String PUZZLE         = "puzzle";
-    private static final String PUZZLE_SUBTYPE = "puzzle_type";
-    private static final String HISTORY        = "history";
-
-    private String  currentPuzzle;
-    private String  currentPuzzleSubtype;
-    private boolean history;
-
     private Unbinder mUnbinder;
     @BindView(R.id.linechart)           LineChart lineChartView;
     @BindView(R.id.personalBestTimes)   TextView  personalBestTimes;
     @BindView(R.id.sessionBestTimes)    TextView  sessionBestTimes;
     @BindView(R.id.sessionCurrentTimes) TextView  sessionCurrentTimes;
-    @BindView(R.id.progressSpinner)     MaterialProgressBar progressBar;
+    @BindView(R.id.progress_spinner)    MaterialProgressBar progressBar;
 
     // Things that must be hidden/shown when refreshing the card.
     @BindViews({
@@ -82,27 +75,10 @@ public class TimerGraphFragment extends Fragment implements StatisticsCache.Stat
     }
 
     // We have to put a boolean history here because it resets when we change puzzles.
-    public static TimerGraphFragment newInstance(String puzzle, String puzzleType, boolean history) {
-        TimerGraphFragment fragment = new TimerGraphFragment();
-        Bundle args = new Bundle();
-        args.putString(PUZZLE, puzzle);
-        args.putBoolean(HISTORY, history);
-        args.putString(PUZZLE_SUBTYPE, puzzleType);
-        fragment.setArguments(args);
+    public static TimerGraphFragment newInstance() {
+        final TimerGraphFragment fragment = new TimerGraphFragment();
         if (DEBUG_ME) Log.d(TAG, "newInstance() -> " + fragment);
         return fragment;
-    }
-
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        if (DEBUG_ME) Log.d(TAG, "onCreate(savedInstanceState=" + savedInstanceState + ")");
-        super.onCreate(savedInstanceState);
-
-        if (getArguments() != null) {
-            currentPuzzle = getArguments().getString(PUZZLE);
-            currentPuzzleSubtype = getArguments().getString(PUZZLE_SUBTYPE);
-            history = getArguments().getBoolean(HISTORY);
-        }
     }
 
     @Override
@@ -184,43 +160,69 @@ public class TimerGraphFragment extends Fragment implements StatisticsCache.Stat
 
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        if (DEBUG_ME) Log.d(TAG, "onActivityCreated(savedInstanceState="
+                + savedInstanceState + ')');
         super.onActivityCreated(savedInstanceState);
 
-        // "restartLoader" ensures that any old loader with the wrong puzzle type/subtype will not
-        // be reused. For now, those arguments are just passed via their respective fields to
-        // "onCreateLoader".
-        //
+        // The loader does not load anything immediately on being started, it just begins listening
+        // for broadcast events affecting the data. Broadcast the "bootstrap" intent from
+        // "onResume()", when it is certain that this loader will be ready and listening.
         // Starting loaders here in "onActivityCreated" ensures that "onCreateView" is complete.
-        //
         // An anonymous inner class is neater than implementing "LoaderCallbacks".
-        if (DEBUG_ME) Log.d(TAG, "onActivityCreated -> restartLoader: CHART_DATA_LOADER_ID");
-        getLoaderManager().restartLoader(MainActivity.CHART_DATA_LOADER_ID, null,
-                new LoaderManager.LoaderCallbacks<Wrapper<ChartStatistics>>() {
+        if (DEBUG_ME) Log.d(TAG, "onActivityCreated() -> initLoader: CHART DATA LOADER");
+        getLoaderManager().initLoader(MainActivity.CHART_DATA_LOADER_ID, null,
+                new LoggingLoaderCallbacks<ChartStatistics>(TAG, "CHART DATA LOADER") {
                     @Override
-                    public Loader<Wrapper<ChartStatistics>> onCreateLoader(int id, Bundle args) {
-                        if (DEBUG_ME) Log.d(TAG, "onCreateLoader: CHART_DATA_LOADER_ID");
+                    public Loader<ChartStatistics> onCreateLoader(int id, Bundle args) {
+                        if (DEBUG_ME) super.onCreateLoader(id, args);
                         // "ChartStyle" allows the Loader to be executed without the need to hold a
                         // reference to an Activity context (required to access theme attributes),
                         // which would be likely to cause memory leaks and crashes.
                         return new ChartStatisticsLoader(
-                                getContext(), new ChartStyle(getActivity()), currentPuzzle,
-                                currentPuzzleSubtype, !history);
+                                getContext(), new ChartStyle(getActivity()));
                     }
 
                     @Override
-                    public void onLoadFinished(Loader<Wrapper<ChartStatistics>> loader,
-                                               Wrapper<ChartStatistics> data) {
-                        if (DEBUG_ME) Log.d(TAG, "onLoadFinished: CHART_DATA_LOADER_ID");
-                        updateChart(data.content());
+                    public void onLoadFinished(Loader<ChartStatistics> loader,
+                                               ChartStatistics data) {
+                        if (DEBUG_ME) super.onLoadFinished(loader, data);
+                        updateChart(data);
                     }
 
                     @Override
-                    public void onLoaderReset(Loader<Wrapper<ChartStatistics>> loader) {
-                        if (DEBUG_ME) Log.d(TAG, "onLoaderReset: CHART_DATA_LOADER_ID");
+                    public void onLoaderReset(Loader<ChartStatistics> loader) {
+                        if (DEBUG_ME) super.onLoaderReset(loader);
                         // Nothing to do here, as the "ChartStatistics" object was never retained.
                         // The view is most likely destroyed at this time, so no need to update it.
                     }
                 });
+    }
+
+    @Override
+    public void onResume() {
+        if (DEBUG_ME) Log.d(TAG, "onResume()");
+        super.onResume();
+
+        // Will have not effect if already booted and main state is in sync....
+        TTIntent.broadcastBootChartStatisticsLoader(getMainState());
+    }
+
+    /**
+     * Reloads the chart statistics if the main state changes and the chart statistics are not
+     * already in sync with the new main state.
+     *
+     * @param newMainState The new main state.
+     * @param oldMainState The old main state.
+     */
+    @Override
+    public void onMainStateChanged(
+            @NonNull MainState newMainState, @NonNull MainState oldMainState) {
+        super.onMainStateChanged(newMainState, oldMainState); // For logging.
+
+        // Send a signal to the chart statistics loader to ensure it is in sync with the main state.
+        // If it is already in sync (perhaps due to another fragment broadcasting the same intent),
+        // it will ignore the request.
+        TTIntent.broadcastMainStateChanged(newMainState);
     }
 
     @Override
@@ -309,58 +311,60 @@ public class TimerGraphFragment extends Fragment implements StatisticsCache.Stat
             return;
         }
 
-        // "tr()" converts from "AverageCalculator.UNKNOWN" and "AverageCalculator.DNF" to the
-        // values needed by "convertTimeToString".
+        // "stats.get*" methods will return the time appropriately (WCA) rounded and then
+        // "formatTimeStatistic" will format the given time to the correct (WCA) resolution.
 
-        String allTimeBestAvg3 = convertTimeToString(
-                tr(stats.getAverageOf(3, false).getBestAverage()));
-        String allTimeBestAvg5 = convertTimeToString(
-                tr(stats.getAverageOf(5, false).getBestAverage()));
-        String allTimeBestAvg12 = convertTimeToString(
-                tr(stats.getAverageOf(12, false).getBestAverage()));
-        String allTimeBestAvg50 = convertTimeToString(
-                tr(stats.getAverageOf(50, false).getBestAverage()));
-        String allTimeBestAvg100 = convertTimeToString(
-                tr(stats.getAverageOf(100, false).getBestAverage()));
-        String allTimeBestAvg1000 = convertTimeToString(
-                tr(stats.getAverageOf(1_000, false).getBestAverage()));
+        String allTimeBestAvg3 = formatTimeStatistic(
+                stats.getAverageOf(3, false).getBestAverage());
+        String allTimeBestAvg5 = formatTimeStatistic(
+                stats.getAverageOf(5, false).getBestAverage());
+        String allTimeBestAvg12 = formatTimeStatistic(
+                stats.getAverageOf(12, false).getBestAverage());
+        String allTimeBestAvg50 = formatTimeStatistic(
+                stats.getAverageOf(50, false).getBestAverage());
+        String allTimeBestAvg100 = formatTimeStatistic(
+                stats.getAverageOf(100, false).getBestAverage());
+        String allTimeBestAvg1000 = formatTimeStatistic(
+                stats.getAverageOf(1_000, false).getBestAverage());
 
-        String allTimeMeanTime = convertTimeToString(tr(stats.getAllTimeMeanTime()));
-        String allTimeBestTime = convertTimeToString(tr(stats.getAllTimeBestTime()));
-        String allTimeWorstTime = convertTimeToString(tr(stats.getAllTimeWorstTime()));
+        String allTimeMeanTime = formatTimeStatistic(stats.getAllTimeMeanTime());
+        String allTimeBestTime = formatTimeStatistic(stats.getAllTimeBestTime());
+        String allTimeWorstTime = formatTimeStatistic(stats.getAllTimeWorstTime());
         // Format count using appropriate grouping separators, e.g., "1,234", not "1234".
-        String allTimeCount = String.format(Locale.getDefault(), "%,d", stats.getAllTimeNumSolves());
+        String allTimeCount
+                = String.format(Locale.getDefault(), "%,d", stats.getAllTimeNumSolves());
 
-        String sessionBestAvg3 = convertTimeToString(
-                tr(stats.getAverageOf(3, true).getBestAverage()));
-        String sessionBestAvg5 = convertTimeToString(
-                tr(stats.getAverageOf(5, true).getBestAverage()));
-        String sessionBestAvg12 = convertTimeToString(
-                tr(stats.getAverageOf(12, true).getBestAverage()));
-        String sessionBestAvg50 = convertTimeToString(
-                tr(stats.getAverageOf(50, true).getBestAverage()));
-        String sessionBestAvg100 = convertTimeToString(
-                tr(stats.getAverageOf(100, true).getBestAverage()));
-        String sessionBestAvg1000 = convertTimeToString(
-                tr(stats.getAverageOf(1_000, true).getBestAverage()));
+        String sessionBestAvg3 = formatTimeStatistic(
+                stats.getAverageOf(3, true).getBestAverage());
+        String sessionBestAvg5 = formatTimeStatistic(
+                stats.getAverageOf(5, true).getBestAverage());
+        String sessionBestAvg12 = formatTimeStatistic(
+                stats.getAverageOf(12, true).getBestAverage());
+        String sessionBestAvg50 = formatTimeStatistic(
+                stats.getAverageOf(50, true).getBestAverage());
+        String sessionBestAvg100 = formatTimeStatistic(
+                stats.getAverageOf(100, true).getBestAverage());
+        String sessionBestAvg1000 = formatTimeStatistic(
+                stats.getAverageOf(1_000, true).getBestAverage());
 
-        String sessionMeanTime = convertTimeToString(tr(stats.getSessionMeanTime()));
-        String sessionBestTime = convertTimeToString(tr(stats.getSessionBestTime()));
-        String sessionWorstTime = convertTimeToString(tr(stats.getSessionWorstTime()));
-        String sessionCount = String.format(Locale.getDefault(), "%,d", stats.getSessionNumSolves());
+        String sessionMeanTime = formatTimeStatistic(stats.getSessionMeanTime());
+        String sessionBestTime = formatTimeStatistic(stats.getSessionBestTime());
+        String sessionWorstTime = formatTimeStatistic(stats.getSessionWorstTime());
+        String sessionCount
+                = String.format(Locale.getDefault(), "%,d", stats.getSessionNumSolves());
 
-        String sessionCurrentAvg3 = convertTimeToString(
-                tr(stats.getAverageOf(3, true).getCurrentAverage()));
-        String sessionCurrentAvg5 = convertTimeToString(
-                tr(stats.getAverageOf(5, true).getCurrentAverage()));
-        String sessionCurrentAvg12 = convertTimeToString(
-                tr(stats.getAverageOf(12, true).getCurrentAverage()));
-        String sessionCurrentAvg50 = convertTimeToString(
-                tr(stats.getAverageOf(50, true).getCurrentAverage()));
-        String sessionCurrentAvg100 = convertTimeToString(
-                tr(stats.getAverageOf(100, true).getCurrentAverage()));
-        String sessionCurrentAvg1000 = convertTimeToString(
-                tr(stats.getAverageOf(1_000, true).getCurrentAverage()));
+        String sessionCurrentAvg3 = formatTimeStatistic(
+                stats.getAverageOf(3, true).getCurrentAverage());
+        String sessionCurrentAvg5 = formatTimeStatistic(
+                stats.getAverageOf(5, true).getCurrentAverage());
+        String sessionCurrentAvg12 = formatTimeStatistic(
+                stats.getAverageOf(12, true).getCurrentAverage());
+        String sessionCurrentAvg50 = formatTimeStatistic(
+                stats.getAverageOf(50, true).getCurrentAverage());
+        String sessionCurrentAvg100 = formatTimeStatistic(
+                stats.getAverageOf(100, true).getCurrentAverage());
+        String sessionCurrentAvg1000 = formatTimeStatistic(
+                stats.getAverageOf(1_000, true).getCurrentAverage());
 
         personalBestTimes.setText(
                 allTimeBestAvg3 + "\n" +

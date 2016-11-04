@@ -5,12 +5,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Parcelable;
+import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import com.aricneto.twistify.BuildConfig;
 import com.aricneto.twistytimer.TwistyTimer;
+import com.aricneto.twistytimer.items.PuzzleType;
 import com.aricneto.twistytimer.items.Solve;
 
 import java.util.Arrays;
@@ -74,6 +76,18 @@ public final class TTIntent {
     public static final String CATEGORY_ALG_DATA_CHANGES = CATEGORY_PREFIX + "ALG_DATA_CHANGES";
 
     /**
+     * The category for intents that communicate alerts to the scramble loader, such as change to
+     * the puzzle type or the need to prepare a new scramble.
+     */
+    public static final String CATEGORY_SCRAMBLE_ALERTS = CATEGORY_PREFIX + "SCRAMBLE_ALERTS";
+
+    /**
+     * The main application state has been changed. Receivers should apply the new state. The state
+     * information can be retrieved using {@link #getMainState(Intent)}.
+     */
+    public static final String ACTION_MAIN_STATE_CHANGED = ACTION_PREFIX + "MAIN_STATE_CHANGED";
+
+    /**
      * One new solve time has been added.
      */
     public static final String ACTION_TIME_ADDED = ACTION_PREFIX + "TIME_ADDED";
@@ -93,37 +107,48 @@ public final class TTIntent {
             = ACTION_PREFIX + "TIMES_MOVED_TO_HISTORY";
 
     /**
-     * The user has selected the option to show only times for the current session. Any solve times
-     * being presented should be reloaded to match the new state, if necessary.
+     * Bootstrap the statistics loader, now that main state information is available and the
+     * fragments are ready to receive the data. If the loader is already bootstrapped, this may be
+     * ignored unless there is a change to the main state.
      */
-    public static final String ACTION_SESSION_TIMES_SHOWN = ACTION_PREFIX + "SESSION_TIMES_SHOWN";
+    public static final String ACTION_BOOT_STATISTICS_LOADER
+            = ACTION_PREFIX + "BOOT_STATISTICS_LOADER";
 
     /**
-     * The user has selected the option to show the fill history of all times for all past and
-     * current sessions. Any solve times being presented should be reloaded to match the new state,
-     * if necessary.
+     * Bootstrap the chart statistics loader, now that main state information is available the
+     * fragments are ready to receive the data. If the loader is already bootstrapped, this may be
+     * ignored unless there is a change to the main state.
      */
-    public static final String ACTION_HISTORY_TIMES_SHOWN = ACTION_PREFIX + "HISTORY_TIMES_SHOWN";
+    public static final String ACTION_BOOT_CHART_STATISTICS_LOADER
+            = ACTION_PREFIX + "BOOT_CHART_STATISTICS_LOADER";
 
     /**
-     * The user has scrolled a page, causing a different tab to be displayed. At the start of a
-     * scroll action, the user touches the screen, which may have been interpreted as an action to
-     * start the timer. However, if that touch then developed into a swipe that scrolled the page
-     * and switched tabs, the action to start the timer should be cancelled.
+     * The tool-bar and tab strip should be hidden.
      */
-    public static final String ACTION_SCROLLED_PAGE = ACTION_PREFIX + "SCROLLED_PAGE";
+    public static final String ACTION_HIDE_TOOLBAR = ACTION_PREFIX + "HIDE_TOOLBAR";
 
     /**
-     * The display of the tool bar has been restored. This action corresponds to the end of the
-     * animation that restores the tool bar.
+     * The tool-bar and tab strip should be shown.
+     */
+    public static final String ACTION_SHOW_TOOLBAR = ACTION_PREFIX + "SHOW_TOOLBAR";
+
+    /**
+     * The tool-bar and tab strip have been restored and are now shown. This action corresponds to
+     * the end of the animation that shows those views if they have been hidden.
      */
     public static final String ACTION_TOOLBAR_RESTORED = ACTION_PREFIX + "TOOLBAR_RESTORED";
 
     /**
-     * The tool bar button to generate a new scramble has been pressed and the receiver should
-     * perform that action.
+     * The tool bar button to generate a new scramble has been pressed, or the scrambles are being
+     * generated automatically by the timer, and the receiver should perform that action.
      */
     public static final String ACTION_GENERATE_SCRAMBLE = ACTION_PREFIX + "GENERATE_SCRAMBLE";
+
+    /**
+     * A new scramble has been generated and the image for that scramble should now be generated.
+     */
+    public static final String ACTION_GENERATE_SCRAMBLE_IMAGE
+            = ACTION_PREFIX + "GENERATE_SCRAMBLE_IMAGE";
 
     /**
      * Selection mode has been turned on for the list of times.
@@ -153,29 +178,24 @@ public final class TTIntent {
             = ACTION_PREFIX + "DELETE_SELECTED_TIMES";
 
     /**
-     * The timer has been started.
-     */
-    public static final String ACTION_TIMER_STARTED = ACTION_PREFIX + "TIMER_STARTED";
-
-    /**
-     * The timer has been stopped.
-     */
-    public static final String ACTION_TIMER_STOPPED = ACTION_PREFIX + "TIMER_STOPPED";
-
-    /**
      * One or more algorithms has been added, deleted or otherwise modified.
      */
     public static final String ACTION_ALGS_MODIFIED = ACTION_PREFIX + "ALGS_MODIFIED";
 
     /**
-     * The name of an intent extra that can hold the name of the puzzle type.
+     * The name of an intent extra that can hold the main state information for the application.
+     */
+    public static final String EXTRA_MAIN_STATE = EXTRA_PREFIX + "MAIN_STATE";
+
+    /**
+     * The name of an intent extra that can hold the currently selected puzzle type.
      */
     public static final String EXTRA_PUZZLE_TYPE = EXTRA_PREFIX + "PUZZLE_TYPE";
 
     /**
-     * The name of an intent extra that can hold the name of the puzzle subtype.
+     * The name of an intent extra that can hold the last generated scramble sequence string.
      */
-    public static final String EXTRA_PUZZLE_SUBTYPE = EXTRA_PREFIX + "PUZZLE_SUBTYPE";
+    public static final String EXTRA_SCRAMBLE = EXTRA_PREFIX + "SCRAMBLE";
 
     /**
      * The name of an intent extra that can be used to record a {@link Solve}.
@@ -200,8 +220,9 @@ public final class TTIntent {
                 ACTION_TIME_ADDED,
                 ACTION_TIMES_MODIFIED,
                 ACTION_TIMES_MOVED_TO_HISTORY,
-                ACTION_HISTORY_TIMES_SHOWN,
-                ACTION_SESSION_TIMES_SHOWN,
+                ACTION_MAIN_STATE_CHANGED,
+                ACTION_BOOT_STATISTICS_LOADER,
+                ACTION_BOOT_CHART_STATISTICS_LOADER,
         });
 
         put(CATEGORY_ALG_DATA_CHANGES, new String[] {
@@ -214,11 +235,15 @@ public final class TTIntent {
                 ACTION_DELETE_SELECTED_TIMES,
                 ACTION_SELECTION_MODE_ON,
                 ACTION_SELECTION_MODE_OFF,
-                ACTION_TIMER_STARTED,
-                ACTION_TIMER_STOPPED,
+                ACTION_HIDE_TOOLBAR,
+                ACTION_SHOW_TOOLBAR,
                 ACTION_TOOLBAR_RESTORED,
                 ACTION_GENERATE_SCRAMBLE,
-                ACTION_SCROLLED_PAGE,
+        });
+
+        put(CATEGORY_SCRAMBLE_ALERTS, new String[] {
+                ACTION_GENERATE_SCRAMBLE,
+                ACTION_GENERATE_SCRAMBLE_IMAGE,
         });
     }};
 
@@ -230,22 +255,49 @@ public final class TTIntent {
     }
 
     /**
-     * A convenient wrapper for fragments that use a broadcast receiver that will only notify the
-     * fragment of an intent when the fragment is currently added to its activity.
+     * A convenient wrapper for a broadcast receiver that holds the category of intents (groups of
+     * actions) for which the receiver will be notified.
      */
     // NOTE: The goal of this class is to make a more obvious connection between the categories and
-    // the fragments, as the category will be given in the code of the fragment class at the point
-    // where it instantiates an instance of this class. It also simplifies
-    public abstract static class TTFragmentBroadcastReceiver extends BroadcastReceiver {
-        /**
-         * The fragment that is receiving the broadcasts.
-         */
-        private final Fragment mFragment;
-
+    // the receivers, as the category will be given in the code at the point where it instantiates
+    // an instance of this receiver class. This places the category and actions close together.
+    public abstract static class TTCategoryBroadcastReceiver extends BroadcastReceiver {
         /**
          * The intent category.
          */
         private final String mCategory;
+
+        /**
+         * Creates a new broadcast receiver for a single category of intent actions.
+         *
+         * @param category
+         *     The category of intent actions to be notified to this receiver. Intent actions not
+         *     in this category will not be notified.
+         */
+        public TTCategoryBroadcastReceiver(String category) {
+            mCategory = category;
+        }
+
+        /**
+         * Gets the category of the intent actions that will be matched by this broadcast receiver.
+         *
+         * @return The category.
+         */
+        public String getCategory() {
+            return mCategory;
+        }
+    }
+
+    /**
+     * A convenient wrapper for fragments that use a broadcast receiver that will only notify the
+     * fragment of an intent when the fragment is currently added to its activity. Only intent
+     * actions within the specified category will be notified.
+     */
+    public abstract static class TTFragmentBroadcastReceiver extends TTCategoryBroadcastReceiver {
+        /**
+         * The fragment that is receiving the broadcasts.
+         */
+        private final Fragment mFragment;
 
         /**
          * Creates a new broadcast receiver to be used by a fragment. Matching broadcast intents
@@ -258,8 +310,8 @@ public final class TTIntent {
          *     The category of
          */
         public TTFragmentBroadcastReceiver(Fragment fragment, String category) {
+            super(category);
             mFragment = fragment;
-            mCategory = category;
         }
 
         /**
@@ -290,34 +342,11 @@ public final class TTIntent {
                 onReceiveWhileAdded(context, intent);
             }
         }
-
-        /**
-         * Gets the category of the intent actions that will be matched by this broadcast receiver.
-         *
-         * @return The category.
-         */
-        public String getCategory() {
-            return mCategory;
-        }
-    }
-
-    /**
-     * Broadcasts an intent for the given category and action. To add more details to the intent
-     * (via intent extras), use a {@link BroadcastBuilder}.
-     *
-     * @param category The category of the action.
-     * @param action   The action.
-     */
-    public static void broadcast(String category, String action) {
-        new BroadcastBuilder(category, action).broadcast();
     }
 
     /**
      * Registers a broadcast receiver. The receiver will only be notified of intents that require
-     * the category given and only for the actions that are supported for that category. If the
-     * receiver is used by a fragment, create an instance of {@link TTFragmentBroadcastReceiver}
-     * and register it with the {@link #registerReceiver(TTFragmentBroadcastReceiver)} method
-     * instead, as it will be easier to maintain.
+     * the category given and only for the actions that are supported for that category.
      *
      * @param receiver
      *     The broadcast receiver to be registered.
@@ -328,7 +357,7 @@ public final class TTIntent {
      * @throws IllegalArgumentException
      *     If the category is {@code null}, or is not one of the supported categories.
      */
-    public static void registerReceiver(BroadcastReceiver receiver, String category) {
+    private static void registerReceiver(BroadcastReceiver receiver, String category) {
         final String[] actions = ACTIONS_SUPPORTED_BY_CATEGORY.get(category);
 
         if (category == null || actions.length == 0) {
@@ -349,16 +378,18 @@ public final class TTIntent {
     }
 
     /**
-     * Registers a fragment broadcast receiver. The receiver will only be notified of intents that
-     * require the category defined for the {@code TTFragmentBroadcastReceiver} and only for the
-     * actions supported by that category.
+     * Registers a category broadcast receiver. The receiver will only be notified of intents that
+     * require the category defined for the {@code TTCategoryBroadcastReceiver} and only for the
+     * actions supported by that category. This can also be used for the fragment-specific
+     * {@link TTFragmentBroadcastReceiver}.
      *
-     * @param receiver The fragment broadcast receiver to be registered.
+     * @param receiver
+     *     The category broadcast receiver to be registered.
      *
      * @throws IllegalArgumentException
      *     If the receiver does not define the name of a supported category.
      */
-    public static void registerReceiver(TTFragmentBroadcastReceiver receiver) {
+    public static void registerReceiver(TTCategoryBroadcastReceiver receiver) {
         registerReceiver(receiver, receiver.getCategory());
     }
 
@@ -372,23 +403,128 @@ public final class TTIntent {
     }
 
     /**
-     * Gets the name of the puzzle type from an intent extra.
+     * Broadcasts an intent for the given category and action. To add more details to the intent
+     * (via intent extras), use a {@link BroadcastBuilder}.
      *
-     * @param intent The intent from which to get the puzzle type.
-     * @return The puzzle type, or {@code null} if the intent does not specify a puzzle type.
+     * @param category The category of the action.
+     * @param action   The action.
      */
-    public static String getPuzzleType(Intent intent) {
-        return intent.getStringExtra(EXTRA_PUZZLE_TYPE);
+    public static void broadcast(String category, String action) {
+        builder(category, action).broadcast();
     }
 
     /**
-     * Gets the name of the puzzle subtype from an intent extra.
+     * Broadcasts a request notifying receivers that the main application state has changed.
+     * The broadcast is for receivers monitoring actions for {@link #CATEGORY_TIME_DATA_CHANGES}.
      *
-     * @param intent The intent from which to get the puzzle subtype.
-     * @return The puzzle subtype, or {@code null} if the intent does not specify a puzzle subtype.
+     * @param newMainState The new value for the main application state.
      */
-    public static String getPuzzleSubtype(Intent intent) {
-        return intent.getStringExtra(EXTRA_PUZZLE_SUBTYPE);
+    public static void broadcastMainStateChanged(@NonNull MainState newMainState) {
+        builder(CATEGORY_TIME_DATA_CHANGES, ACTION_MAIN_STATE_CHANGED)
+                .mainState(newMainState)
+                .broadcast();
+    }
+
+    /**
+     * Broadcasts a request to generate a new scramble sequence.
+     *
+     * @param puzzleType The type of the puzzle for which a sequence is required.
+     */
+    public static void broadcastNewScrambleRequest(@NonNull PuzzleType puzzleType) {
+        builder(CATEGORY_SCRAMBLE_ALERTS, ACTION_GENERATE_SCRAMBLE)
+                .puzzleType(puzzleType)
+                .broadcast();
+    }
+
+    /**
+     * Broadcasts a request to generate a new scramble image from a scramble sequence.
+     *
+     * @param puzzleType The type of the puzzle for which a scramble image is required.
+     * @param scramble   The scramble sequence to be represented in the image.
+     */
+    public static void broadcastNewScrambleImageRequest(
+            @NonNull PuzzleType puzzleType, @NonNull String scramble) {
+        builder(CATEGORY_SCRAMBLE_ALERTS, ACTION_GENERATE_SCRAMBLE_IMAGE)
+                .puzzleType(puzzleType)
+                .scramble(scramble)
+                .broadcast();
+    }
+
+    /**
+     * Broadcasts a request to bootstrap the statistics loader, providing the initial main state
+     * information. If the loader is already bootstrapped and it is consistent with the given main
+     * state, it may ignore this request.
+     *
+     * @param mainState The main state information with which to boot the loader.
+     */
+    public static void broadcastBootStatisticsLoader(@NonNull MainState mainState) {
+        builder(CATEGORY_TIME_DATA_CHANGES, ACTION_BOOT_STATISTICS_LOADER)
+                .mainState(mainState)
+                .broadcast();
+    }
+
+    /**
+     * Broadcasts a request to bootstrap the chart statistics loader, providing the initial main
+     * state information. If the loader is already bootstrapped and it is consistent with the given
+     * main state, it may ignore this request.
+     *
+     * @param mainState The main state information with which to boot the loader.
+     */
+    public static void broadcastBootChartStatisticsLoader(@NonNull MainState mainState) {
+        builder(CATEGORY_TIME_DATA_CHANGES, ACTION_BOOT_CHART_STATISTICS_LOADER)
+                .mainState(mainState)
+                .broadcast();
+    }
+
+    /**
+     * Gets the main state from an intent extra.
+     *
+     * @param intent The intent from which to get the main state.
+     * @return The main state, or {@code null} if the intent does not specify any main state.
+     */
+    public static MainState getMainState(Intent intent) {
+        return (MainState) intent.getParcelableExtra(EXTRA_MAIN_STATE);
+    }
+
+    /**
+     * Gets the puzzle type from an intent extra. If the main state was added as an extra, the main
+     * state will be used as the source of the puzzle type if no specific extra for the puzzle type
+     * can be found. The full main state can be retrieved by calling {@link #getMainState(Intent)}.
+     *
+     * @param intent
+     *     The intent from which to get the puzzle type.
+     *
+     * @return
+     *     The puzzle type, or {@code null} if the intent does not specify any puzzle type extra,
+     *     either explicitly or via a {@code MainState} intent extra.
+     */
+    public static PuzzleType getPuzzleType(Intent intent) {
+        PuzzleType puzzleType = null;
+
+        // "EXTRA_PUZZLE_TYPE" takes priority over "EXTRA_MAIN_STATE" if both are set.
+        if (intent.hasExtra(EXTRA_PUZZLE_TYPE)) {
+            puzzleType = PuzzleType.forTypeName(intent.getStringExtra(EXTRA_PUZZLE_TYPE));
+        }
+
+        if (puzzleType == null) {
+            final MainState mainState = getMainState(intent);
+
+            if (mainState != null) {
+                puzzleType = mainState.getPuzzleType();
+            }
+        }
+
+        return puzzleType; // May still be null.
+    }
+
+    /**
+     * Gets the scramble sequence from an intent extra.
+     *
+     * @param intent The intent from which to get the scramble.
+     * @return The scramble, or {@code null} if the intent does not specify any scramble.
+     */
+    public static String getScramble(Intent intent) {
+        return intent.getStringExtra(EXTRA_SCRAMBLE);
     }
 
     /**
@@ -401,6 +537,18 @@ public final class TTIntent {
         final Parcelable solve = intent.getParcelableExtra(EXTRA_SOLVE);
 
         return solve == null ? null : (Solve) solve;
+    }
+
+    /**
+     * Creates a new broadcast builder for the given intent category and action.
+     *
+     * @param category The category of the action.
+     * @param action   The action.
+     *
+     * @return The new broadcast builder.
+     */
+    public static BroadcastBuilder builder(@NonNull String category, @NonNull String action) {
+        return new BroadcastBuilder(category, action);
     }
 
     /**
@@ -417,10 +565,10 @@ public final class TTIntent {
         /**
          * Creates a new broadcast builder for the given intent category and action.
          *
-         * @param category The category of the action. Must not be {@code null}.
-         * @param action   The action. Must not be {@code null}.
+         * @param category The category of the action.
+         * @param action   The action.
          */
-        public BroadcastBuilder(String category, String action) {
+        private BroadcastBuilder(@NonNull String category, @NonNull String action) {
             mIntent = new Intent(action);
             mIntent.addCategory(category); // Will throw NPE if category is null, but that is OK.
         }
@@ -455,25 +603,57 @@ public final class TTIntent {
                 }
             }
 
+            if (DEBUG_ME) Log.d(TAG, "Broadcasting: " + mIntent);
             LocalBroadcastManager.getInstance(TwistyTimer.getAppContext()).sendBroadcast(mIntent);
         }
 
         /**
-         * Sets extras that identify the puzzle type and subtype related to the action of the
-         * intent that will be broadcast. The receiver can retrieve the type and subtype by calling
-         * {@link TTIntent#getPuzzleType(Intent)} and {@link TTIntent#getPuzzleSubtype(Intent)}.
+         * Sets extra that identifies the main state of the application. Changes to the state can
+         * be broadcast and the receiver can retrieve the state by calling
+         * {@link TTIntent#getMainState(Intent)}.
          *
-         * @param puzzleType    The name of the type of puzzle.
-         * @param puzzleSubtype The name of the subtype of puzzle.
+         * @param state The new main state for the application.
          *
          * @return {@code this} broadcast builder, allowing method calls to be chained.
          */
-        public BroadcastBuilder puzzle(String puzzleType, String puzzleSubtype) {
-            if (puzzleType != null) {
-                mIntent.putExtra(EXTRA_PUZZLE_TYPE, puzzleType);
+        public BroadcastBuilder mainState(MainState state) {
+            if (state != null) {
+                mIntent.putExtra(EXTRA_MAIN_STATE, state);
             }
-            if (puzzleSubtype != null) {
-                mIntent.putExtra(EXTRA_PUZZLE_SUBTYPE, puzzleSubtype);
+
+            return this;
+        }
+
+        /**
+         * Sets extra that identifies the current puzzle type. If other main state information is
+         * required, use {@link #mainState(MainState)} instead. Changes to the puzzle type can be
+         * broadcast and the receiver can retrieve the state by calling
+         * {@link TTIntent#getPuzzleType(Intent)}.
+         *
+         * @param puzzleType The new puzzle type.
+         *
+         * @return {@code this} broadcast builder, allowing method calls to be chained.
+         */
+        public BroadcastBuilder puzzleType(PuzzleType puzzleType) {
+            if (puzzleType != null) {
+                mIntent.putExtra(EXTRA_PUZZLE_TYPE, puzzleType.typeName());
+            }
+
+            return this;
+        }
+
+        /**
+         * Sets an optional extra that identifies a scramble sequence related to the action of the
+         * intent that will be broadcast. The receiver can call {@link TTIntent#getScramble(Intent)}
+         * to retrieve the scramble from the intent.
+         *
+         * @param scramble The scramble sequence to be added to the broadcast intent.
+         *
+         * @return {@code this} broadcast builder, allowing method calls to be chained.
+         */
+        public BroadcastBuilder scramble(String scramble) {
+            if (scramble != null) {
+                mIntent.putExtra(EXTRA_SCRAMBLE , scramble);
             }
 
             return this;

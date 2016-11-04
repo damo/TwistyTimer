@@ -5,6 +5,32 @@
     <dimen name="toolbar_elevation">4dp</dimen>
     <dimen name="action_button_margin">8dp</dimen>
 
-    <!-- Default screen margins, per the Android Design guidelines. -->
+    <!--
+    The width of the margin along the left side of the view that is used to intercept touch events
+    that control the timer. When the timer is not running, this margin prevents the timer from
+    starting due to an accidental touch that was intended to access the side drawer menu. When the
+    timer is running, this margin is not applied, so touching anywhere on the screen will stop the
+    timer. This margin is not set on the view as "android:layout-marginLeft"; instead, it is used
+    in the code to pass through intercepted touches only when the timer is not running.
+    -->
+    <dimen name="timer_touch_proxy_margin">16dp</dimen>
+
+    <!--
+    The size of the text for the non-image quick action buttons shown below a result time. There
+    are two sizes, depending on the user's preferred action button size. The text size is given in
+    DIP, not SIP, units to ensure the button layout is predictable.
+    -->
+    <dimen name="qab_text_size_normal">18dp</dimen>
+    <dimen name="qab_text_size_large">27dp</dimen>
+
+    <!--
+    The "timer_widget_time_height" is the desired height (not text size) of the text that presents
+    the time value. The "TimerWidget" will be higher than this, as it allows space for a "headline"
+    above the time. However, the widget is "clever" enough to treat this as a maximum value and to
+    reduce it if necessary to fit within its bounds. The "layout_height" should simply be set to
+    "wrap_content".
+    -->
+    <dimen name="timer_widget_time_height">70dp</dimen>
+    <dimen name="timer_widget_tb_margin">8dp</dimen>
 
 </resources>

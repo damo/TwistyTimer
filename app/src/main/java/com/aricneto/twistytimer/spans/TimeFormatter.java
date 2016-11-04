@@ -1,11 +1,12 @@
 package com.aricneto.twistytimer.spans;
 
-import com.aricneto.twistytimer.utils.PuzzleUtils;
+import com.aricneto.twistytimer.utils.TimeUtils;
+import com.aricneto.twistytimer.utils.WCAMath;
 import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.formatter.YAxisValueFormatter;
 
 /**
- * Created by Ari on 06/02/2016.
+ * Formatter for time values shown on the Y-axis of the solve times chart.
  */
 public class TimeFormatter implements YAxisValueFormatter{
 
@@ -14,6 +15,7 @@ public class TimeFormatter implements YAxisValueFormatter{
 
     @Override
     public String getFormattedValue(float value, YAxis yAxis) {
-        return PuzzleUtils.convertTimeToStringWithoutMilli((long) (value * 1_000L));
+        // Truncate the fractional time to whole milliseconds, then apply the WCA rounding.
+        return TimeUtils.formatTimeLoRes(WCAMath.roundResult((long) (value * 1_000L)));
     }
 }

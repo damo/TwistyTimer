@@ -13,15 +13,13 @@ import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
+import android.widget.SpinnerAdapter;
 import android.widget.TextView;
 
 import com.aricneto.twistify.R;
 import com.aricneto.twistytimer.TwistyTimer;
-import com.aricneto.twistytimer.database.DatabaseHandler;
-import com.aricneto.twistytimer.items.Solve;
-import com.aricneto.twistytimer.utils.PuzzleUtils;
-
-import java.util.List;
+import com.aricneto.twistytimer.adapter.PuzzleTypeSpinnerAdapter;
+import com.aricneto.twistytimer.items.PuzzleType;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -55,12 +53,12 @@ public class PuzzleChooserDialog extends DialogFragment {
          *     tag that identifies the fragment to which the activity should relay the message. The
          *     receiving fragment should also (probably) implement this interface.
          * @param puzzleType
-         *     The name of the newly-selected puzzle type.
-         * @param puzzleCategory
-         *     The name of the newly-selected puzzle category.
+         *     The newly-selected puzzle type.
+         * @param solveCategory
+         *     The name of the newly-selected solve category.
          */
         void onPuzzleSelected(
-                @NonNull String tag, @NonNull String puzzleType, @NonNull String puzzleCategory);
+                @NonNull String tag, @NonNull PuzzleType puzzleType, @NonNull String solveCategory);
     }
 
     private Unbinder mUnbinder;
@@ -68,8 +66,6 @@ public class PuzzleChooserDialog extends DialogFragment {
     @BindView(R.id.puzzleSpinner)   Spinner  puzzleSpinner;
     @BindView(R.id.categorySpinner) Spinner  categorySpinner;
     @BindView(R.id.selectButton)    TextView selectButton;
-
-    private static final String CURRENT_CATEGORY = "Normal";
 
     /**
      * The name of the fragment argument holding a string resource ID for the text to be displayed
@@ -86,14 +82,12 @@ public class PuzzleChooserDialog extends DialogFragment {
     /**
      * The selected puzzle type.
      */
-    private String mSelectedPuzzleType;
+    private PuzzleType mSelectedPuzzleType;
 
     /**
-     * The selected puzzle category.
+     * The selected solve category.
      */
-    private String mSelectedPuzzleCategory;
-
-    private ArrayAdapter<String> categoryAdapter;
+    private String mSelectedSolveCategory;
 
     /**
      * Creates a new instance of this fragment.
@@ -135,22 +129,14 @@ public class PuzzleChooserDialog extends DialogFragment {
             selectButton.setText(buttonTextResID);
         }
 
-        final ArrayAdapter puzzleAdapter = ArrayAdapter.createFromResource(
-                getContext(), R.array.puzzles, android.R.layout.simple_spinner_dropdown_item);
-
-        puzzleSpinner.setAdapter(puzzleAdapter);
-
-        // Be flexible with the initial value, as it depends on what is first in "R.array.puzzle".
-        mSelectedPuzzleType = (String) puzzleSpinner.getSelectedItem();
-        mSelectedPuzzleCategory = CURRENT_CATEGORY;
-
-        updateCategoriesForType(mSelectedPuzzleType);
-
+        // TODO: Default the initial value to whatever is in the "main state".
+        puzzleSpinner.setAdapter(PuzzleTypeSpinnerAdapter.createForChooser(getContext()));
+        mSelectedPuzzleType = (PuzzleType) puzzleSpinner.getSelectedItem();
         puzzleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                mSelectedPuzzleType = PuzzleUtils.getPuzzleInPosition(i);
-                updateCategoriesForType(mSelectedPuzzleType);
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                mSelectedPuzzleType = PuzzleType.forOrdinal(position);
+                categorySpinner.setAdapter(getCategoryAdapterForType(mSelectedPuzzleType));
             }
 
             @Override
@@ -158,10 +144,13 @@ public class PuzzleChooserDialog extends DialogFragment {
             }
         });
 
+        // TODO: Default the initial value to whatever is in the "main state".
+        categorySpinner.setAdapter(getCategoryAdapterForType(mSelectedPuzzleType));
+        mSelectedSolveCategory = (String) categorySpinner.getSelectedItem();
         categorySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                mSelectedPuzzleCategory = categoryAdapter.getItem(i);
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                mSelectedSolveCategory = (String) parent.getItemAtPosition(position);
             }
 
             @Override
@@ -175,7 +164,7 @@ public class PuzzleChooserDialog extends DialogFragment {
                 // Relay this information back to the fragment/activity that opened this chooser.
                 getRelayActivity().onPuzzleSelected(
                         getArguments().getString(ARG_CONSUMER_TAG, "not set!"),
-                        mSelectedPuzzleType, mSelectedPuzzleCategory);
+                        mSelectedPuzzleType, mSelectedSolveCategory);
                 dismiss();
             }
         });
@@ -185,18 +174,10 @@ public class PuzzleChooserDialog extends DialogFragment {
         return dialogView;
     }
 
-    private void updateCategoriesForType(String puzzleType) {
-        final DatabaseHandler dbHandler = TwistyTimer.getDBHandler();
-        final List<String> subtypeList = dbHandler.getAllSubtypesFromType(puzzleType);
-
-        if (subtypeList.size() == 0) {
-            subtypeList.add(CURRENT_CATEGORY);
-            dbHandler.addSolve(new Solve(1, puzzleType, CURRENT_CATEGORY,
-                    0L, "", PuzzleUtils.PENALTY_HIDETIME, "", true));
-        }
-        categoryAdapter = new ArrayAdapter<>(
-                getContext(), android.R.layout.simple_spinner_dropdown_item, subtypeList);
-        categorySpinner.setAdapter(categoryAdapter);
+    private SpinnerAdapter getCategoryAdapterForType(@NonNull PuzzleType puzzleType) {
+        return new ArrayAdapter<>(
+                getContext(), android.R.layout.simple_spinner_dropdown_item,
+                TwistyTimer.getDBHandler().getAllCategoriesForType(puzzleType));
     }
 
     @Override

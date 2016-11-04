@@ -1,0 +1,7 @@
+<resources>
+
+    <dimen name="timer_height">70dp</dimen>
+    <!-- No top/bottom margins: saves vertical space in landscape orientation. -->
+    <dimen name="timer_widget_tb_margin">0dp</dimen>
+
+</resources>

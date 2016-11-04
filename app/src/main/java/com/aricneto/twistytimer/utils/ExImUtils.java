@@ -2,6 +2,9 @@ package com.aricneto.twistytimer.utils;
 
 import android.os.Environment;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+
+import com.aricneto.twistytimer.items.PuzzleType;
 
 import org.joda.time.DateTime;
 
@@ -12,7 +15,26 @@ import java.io.File;
  *
  * @author damo
  */
-public final class ExportImportUtils {
+public final class ExImUtils {
+    /**
+     * The file formats for importing and exporting solve times.
+     */
+    public enum FileFormat {
+        /**
+         * The file format for simple text import/export of solve times for a single puzzle type
+         * and solve category that can be interchanged with external applications. The file format
+         * includes only a few select fields.
+         */
+        EXTERNAL,
+
+        /**
+         * The file format for full text import/export of all solve times used to back-up the
+         * database. In this file format, all database fields are emitted for all solve times of
+         * all puzzle types and solve categories.
+         */
+        BACKUP
+    }
+
     /**
      * The name of the export directory for "external" files in the simple interchange format. This
      * directory is relative to the external storage directory identified by the system.
@@ -34,7 +56,7 @@ public final class ExportImportUtils {
 
     /**
      * The file name template for "external" format files. The are three string placeholders: the
-     * first is for the puzzle type, the second for the puzzle category, and the third for the
+     * first is for the puzzle type, the second for the solve category, and the third for the
      * time-stamp.
      */
     private static final String EXTERNAL_FILE_NAME_TEMPLATE = "Solves_%s_%s_%s" + FILE_NAME_EXT;
@@ -56,7 +78,7 @@ public final class ExportImportUtils {
     /**
      * Private constructor to prevent instantiation of this utility class.
      */
-    private ExportImportUtils() {
+    private ExImUtils() {
     }
 
     /**
@@ -100,23 +122,24 @@ public final class ExportImportUtils {
      * name of an existing file may be returned. This is considered unlikely enough, and not
      * serious enough, that it can be disregarded.
      *
-     * @param puzzleType     The name of the puzzle type.
-     * @param puzzleCategory The name of the puzzle category.
+     * @param puzzleType    The puzzle type.
+     * @param solveCategory The name of the solve category.
      *
      * @return The file (with fill path) to use when exporting the solve times.
      */
-    public static File getExternalFileForExport(String puzzleType, String puzzleCategory) {
+    public static File getExternalFileForExport(PuzzleType puzzleType, String solveCategory) {
         // Assume that the puzzle type is sanitary, but the category may be entered by the user,
         // so it may cause problems unless it is sanitized first.
         return new File(
                 new File(Environment.getExternalStorageDirectory(), EXTERNAL_EXPORT_DIR_NAME),
                 String.format(EXTERNAL_FILE_NAME_TEMPLATE,
-                        puzzleType, sanitizeFileName(puzzleCategory), getFileTimeStamp()));
+                        puzzleType.typeName(), sanitizeFileName(solveCategory),
+                        getFileTimeStamp()));
     }
 
     /**
      * Gets the file to create when exporting all solve times in the back-up format. The file name
-     * will include a time-stamp. See {@link #getExternalFileForExport(String, String)} for a
+     * will include a time-stamp. See {@link #getExternalFileForExport(PuzzleType, String)} for a
      * caution about time-stamp. Call {@link #ensureBackupExportDir()} before attempting to create
      * this file.
      *
@@ -164,7 +187,7 @@ public final class ExportImportUtils {
      *     A sanitized string with problematic characters converted to underscores; or an empty
      *     string if {@code name} is empty or {@code null}.
      */
-    private static CharSequence sanitizeFileName(CharSequence name) {
+    private static CharSequence sanitizeFileName(@Nullable CharSequence name) {
         final StringBuilder s = new StringBuilder(name != null ? name : "");
 
         for (int i = 0; i < s.length(); i++) {

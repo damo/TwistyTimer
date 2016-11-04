@@ -1,9 +1,7 @@
 package com.aricneto.twistytimer.adapter;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.database.Cursor;
-import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.widget.RecyclerView;
@@ -20,7 +18,7 @@ import com.aricneto.twistytimer.fragment.dialog.AlgDialog;
 import com.aricneto.twistytimer.listener.DialogListener;
 import com.aricneto.twistytimer.utils.AlgUtils;
 
-import java.util.HashMap;
+import java.util.Map;
 
 import butterknife.BindView;
 import butterknife.BindViews;
@@ -28,23 +26,21 @@ import butterknife.ButterKnife;
 import me.zhanghai.android.materialprogressbar.MaterialProgressBar;
 
 /**
- * Created by Ari on 05/06/2015.
+ * A cursor adapter that supports the presentation of algorithms in the {@link AlgListFragment}.
  */
-
 public class AlgCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHolder> implements DialogListener {
     private final Context          mContext;  // Current context
     private final FragmentManager  mFragmentManager;
-    HashMap<Character, Integer> colorHash;
+    private final Map<Character, Integer> colorHash;
 
     // Locks opening new windows until the last one is dismissed
     private boolean isLocked;
 
     public AlgCursorAdapter(Context context, Cursor cursor, AlgListFragment listFragment) {
         super(cursor);
-        this.mContext = context;
-        this.mFragmentManager = listFragment.getFragmentManager();
-        final SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
-        colorHash = AlgUtils.getColorLetterHashMap(sp);
+        mContext = context;
+        mFragmentManager = listFragment.getFragmentManager();
+        colorHash = AlgUtils.getColorLetterHashMap();
     }
 
     @Override

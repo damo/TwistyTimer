@@ -1,34 +1,41 @@
 package com.aricneto.twistytimer.utils;
 
 import android.content.Context;
-import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.support.v4.content.ContextCompat;
 
 import com.aricneto.twistify.R;
 
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Used by the alg list
  */
 public class AlgUtils {
-
-
     /**
-     * This function returns a hashmap which contains the colors for each face of the cube
+     * Gets a map that maps color letters to color values. The mapping is suitable for 6-sided
+     * puzzles. Colors are defined for the letters 'Y' (yellow), 'R' (red), 'G' (green),
+     * 'B' (blue), 'O' (orange), 'W' (white), and 'N' (neutral). The neutral color can be used
+     * when the color is not important, e.g., for the non-yellow stickers on the yellow face when
+     * presenting OLL algorithms.
+     *
+     * @return
+     *     A map keyed by the color letter and containing each corresponding color value.
      */
-    public static HashMap<Character, Integer> getColorLetterHashMap(SharedPreferences sp) {
-        HashMap<Character, Integer> hashMap = new HashMap<>(7);
-        hashMap.put('Y', Color.parseColor("#" + sp.getString("cubeDown", "FDD835")));
-        hashMap.put('R', Color.parseColor("#" + sp.getString("cubeRight", "EC0000")));
-        hashMap.put('G', Color.parseColor("#" + sp.getString("cubeFront", "02D040")));
-        hashMap.put('B', Color.parseColor("#" + sp.getString("cubeBack", "304FFE")));
-        hashMap.put('O', Color.parseColor("#" + sp.getString("cubeLeft", "FF8B24")));
-        hashMap.put('W', Color.parseColor("#" + sp.getString("cubeTop", "FFFFFF")));
-        hashMap.put('N', Color.parseColor("#9E9E9E"));
-        return hashMap;
+    public static Map<Character, Integer> getColorLetterHashMap() {
+        final Map<Character, Integer> map = new HashMap<>(7);
+
+        map.put('W', FaceColor.UP.getColor());
+        map.put('Y', FaceColor.DOWN.getColor());
+        map.put('O', FaceColor.LEFT.getColor());
+        map.put('R', FaceColor.RIGHT.getColor());
+        map.put('G', FaceColor.FRONT.getColor());
+        map.put('B', FaceColor.BACK.getColor());
+
+        map.put('N', 0x9e9e9e); // Grey.
+
+        return map;
     }
 
     public static Drawable getPllArrow(Context context, String name) {
@@ -473,9 +480,7 @@ public class AlgUtils {
                                 "M' U' M2' U' M2' U' M' U2' M2'\n" +
                                 "R' U' R2 U R U R' U' R U R U' R U' R'";
                 }
-
         }
         return "";
     }
-
 }

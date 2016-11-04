@@ -6,10 +6,9 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 
 /**
- * A ViewPager that doesn't allow swiping
- * */
+ * A view pager with the option to disable swiping to change pages.
+ */
 public class LockedViewPager extends ViewPager {
-
     private boolean isPagingEnabled = true;
 
     public LockedViewPager(Context context) {
@@ -22,15 +21,15 @@ public class LockedViewPager extends ViewPager {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        return this.isPagingEnabled && super.onTouchEvent(event);
+        return isPagingEnabled && super.onTouchEvent(event);
     }
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        return this.isPagingEnabled && super.onInterceptTouchEvent(event);
+        return isPagingEnabled && super.onInterceptTouchEvent(event);
     }
 
-    public void setPagingEnabled(boolean b) {
-        this.isPagingEnabled = b;
+    public void setPagingEnabled(boolean enabled) {
+        isPagingEnabled = enabled;
     }
 }

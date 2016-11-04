@@ -25,7 +25,7 @@
             tools:text="35.50" />
 
         <TextView
-            android:id="@+id/puzzlePenaltyText"
+            android:id="@+id/penaltyText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignBaseline="@id/timeText"
@@ -72,12 +72,12 @@
             android:drawablePadding="16dp"
             android:textColor="@android:color/black"
             android:textSize="14sp"
-            android:visibility="gone"
             tools:text="Got a PLL skip"
+            android:visibility="gone"
             tools:visibility="visible" />
 
         <TextView
-            android:id="@+id/scrambleText"
+            android:id="@+id/scramble_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@id/commentText"
@@ -89,18 +89,20 @@
             android:gravity="center_vertical"
             android:textColor="@color/md_blue_500"
             android:textSize="14sp"
-            tools:text="D2 U' R2 U2 R2 F2 U' B2 U' F2 U' R' B L D B' U' R U' R2 F U'" />
+            tools:text="D2 U' R2 U2 R2 F2 U' B2 U' F2 U' R' B L D B' U' R U' R2 F U'"
+            android:visibility="gone"
+            tools:visibility="visible" />
 
         <include
             android:id="@+id/divider02"
             layout="@layout/view_divider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_below="@id/scrambleText"
+            android:layout_below="@id/scramble_text"
             android:layout_marginTop="16dp" />
 
         <ImageView
-            android:id="@+id/editButton"
+            android:id="@+id/penaltyButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentRight="true"
@@ -143,6 +145,6 @@
             android:padding="8dp"
             android:src="@drawable/ic_more_vert_black_18dp" />
 
-
     </RelativeLayout>
+
 </ScrollView>

@@ -26,9 +26,9 @@ public class ComponentState implements Parcelable {
     public String puzzleType;
 
     /**
-     * The name of the puzzle subtype.
+     * The name of the solve category.
      */
-    public String puzzleSubtype;
+    public String solveCategory;
 
     /**
      * {@code true} if the full history of all solve times should be displayed, or {@code false} if
@@ -50,10 +50,10 @@ public class ComponentState implements Parcelable {
     public ComponentState() {
     }
 
-    public ComponentState(String puzzleType, String puzzleSubtype, boolean isHistoryEnabled,
+    public ComponentState(String puzzleType, String solveCategory, boolean isHistoryEnabled,
                           Solve solve, String scramble) {
         this.puzzleType = puzzleType;
-        this.puzzleSubtype = puzzleSubtype;
+        this.solveCategory = solveCategory;
         this.isHistoryEnabled = isHistoryEnabled;
         this.solve = solve;
         this.scramble = scramble;
@@ -64,7 +64,7 @@ public class ComponentState implements Parcelable {
 
         // Use "readValue", not "readString" or "readParcelable", to allow that values may be null.
         puzzleType = (String) in.readValue(cl);
-        puzzleSubtype = (String) in.readValue(cl);
+        solveCategory = (String) in.readValue(cl);
         isHistoryEnabled = in.readByte() != 0;
         solve = (Solve) in.readValue(cl);
         scramble = (String) in.readValue(cl);
@@ -85,7 +85,7 @@ public class ComponentState implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         // Use "writeValue" to allow that values to be written may be null.
         dest.writeValue(puzzleType);
-        dest.writeValue(puzzleSubtype);
+        dest.writeValue(solveCategory);
         dest.writeByte((byte) (isHistoryEnabled ? 1 : 0));
         dest.writeValue(solve);
         dest.writeValue(scramble);

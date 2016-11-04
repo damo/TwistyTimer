@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+For landscape orientation: 1-column layout of the session statistics for the main timer fragment.
+-->
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    tools:showIn="@layout/fragment_timer">
+
+    <TextView
+        android:id="@+id/sessionDetailTextAvg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="right"
+        android:text="@string/detail_text_avg"
+        android:textColor="?colorTimerDetailText"
+        android:textSize="13sp"/>
+
+    <TextView
+        android:id="@+id/sessionStatsTimesAvg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="8dp"
+        android:layout_toRightOf="@id/sessionDetailTextAvg"
+        android:gravity="left"
+        android:text="--\n--\n--\n--"
+        android:textColor="?colorTimerDetailText"
+        android:textSize="13sp"/>
+
+    <TextView
+        android:id="@+id/sessionDetailTextMore"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/sessionDetailTextAvg"
+        android:gravity="right"
+        android:text="@string/detail_text_more"
+        android:textColor="?colorTimerDetailText"
+        android:textSize="13sp"/>
+
+    <TextView
+        android:id="@+id/sessionStatsTimesMore"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/sessionStatsTimesAvg"
+        android:layout_marginLeft="8dp"
+        android:layout_toRightOf="@id/sessionDetailTextMore"
+        android:gravity="left"
+        android:text="--\n--\n--\n--"
+        android:textColor="?colorTimerDetailText"
+        android:textSize="13sp"/>
+
+</RelativeLayout>

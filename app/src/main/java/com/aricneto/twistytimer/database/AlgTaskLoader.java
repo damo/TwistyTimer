@@ -6,8 +6,7 @@ import android.support.v4.content.CursorLoader;
 import com.aricneto.twistytimer.TwistyTimer;
 
 public class AlgTaskLoader extends CursorLoader {
-
-    String subset;
+    private final String subset;
 
     public AlgTaskLoader(String subset) {
         super(TwistyTimer.getAppContext());
@@ -16,9 +15,6 @@ public class AlgTaskLoader extends CursorLoader {
 
     @Override
     public Cursor loadInBackground() {
-        return TwistyTimer.getReadableDB().query(
-                DatabaseHandler.TABLE_ALGS, null,
-                DatabaseHandler.KEY_SUBSET + "=?",
-                new String[] { subset }, null, null, null, null);
+        return TwistyTimer.getDBHandler().getAllAlgorithmsForSubset(subset);
     }
 }

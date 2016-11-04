@@ -42,9 +42,9 @@
     <string name="list_empty_state_message_history">Nada aqui!\nTodas as suas soluções antigas serão guardadas aqui.</string>
     <string name="personal_best_message">Parabéns!\nVocê acaba de bater seu recorde pessoal por %1$s</string>
     <string name="personal_worst_message">Parabéns!\nEsse é o pior tempo que você já fez, quebrando seu recorde por %1$s</string>
-    <string name="remove_subtype_confirmation">Remover categoria?</string>
-    <string name="remove_subtype_confirmation_content">Tem certeza que deseja remover a categoria</string>
-    <string name="remove_subtype_title">Selecione uma categoria para remover</string>
+    <string name="remove_category_confirmation">Remover categoria?</string>
+    <string name="remove_category_confirmation_content">Tem certeza que deseja remover a categoria</string>
+    <string name="remove_category_title">Selecione uma categoria para remover</string>
     <string name="scramble_text_tap_hint">Toque aqui para ver o embaralhamento</string>
     <string name="task_remove">Remover</string>
     <string name="graph_stats_title">Estat.</string>
@@ -59,8 +59,8 @@
     <string name="color_purple">Roxo</string>
     <string name="color_red">Vermelho</string>
     <string name="color_teal">Teal</string>
-    <string name="remove_subtype_confirmation_content_continuation">Isso também irá remover todas as soluções pertencentes a esta categoria.</string>
-    <string name="w_new_subtype">Nova</string>
+    <string name="remove_category_confirmation_content_continuation">Isso também irá remover todas as soluções pertencentes a esta categoria.</string>
+    <string name="w_new_category">Nova</string>
     <string name="action_rename">Renomear</string>
     <string name="backgroundEnabledSummary">Colorir o fundo do cronômetro com a cor principal</string>
     <string name="backgroundEnabledTitle">Fundo colorido</string>
@@ -71,7 +71,7 @@
     <string name="enter_new_name_dialog">Digite um novo nome</string>
     <string name="holdEnabledSummary">Segurar o cronômetro por 0,5 segundos para começar</string>
     <string name="holdEnabledTitle">Segurar para começar</string>
-    <string name="rename_subtype_title">Selecione uma categoria para renomear</string>
+    <string name="rename_category_title">Selecione uma categoria para renomear</string>
     <string name="scrambleImageEnabledSummary">Mostrar uma imagem do embaralhamento no cronômetro</string>
     <string name="scrambleImageEnabledTitle">Imagem do embaralhamento</string>
     <string name="sessionStatsEnabledSummary">Mostrar estatísticas da sessão no cronômetro</string>

@@ -6,6 +6,7 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
+import android.support.annotation.IntegerRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
 import android.support.v7.app.AppCompatActivity;
@@ -94,16 +95,18 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public boolean onPreferenceClick(android.preference.Preference preference) {
                 switch (Prefs.keyToResourceID(preference.getKey(),
-                        R.string.pk_inspection_time,
-                        R.string.pk_show_scramble_x_cross_hints,
+                        R.string.pk_inspection_time_s,
+                        R.string.pk_show_x_cross_hints,
                         R.string.pk_open_timer_appearance_settings)) {
 
-                    case R.string.pk_inspection_time:
-                        createNumberDialog(R.string.inspection_time, R.string.pk_inspection_time);
+                    case R.string.pk_inspection_time_s:
+                        createInspectionTimeDialog();
                         break;
 
-                    case R.string.pk_show_scramble_x_cross_hints:
-                        if (Prefs.getBoolean(R.string.pk_show_scramble_x_cross_hints, false)) {
+                    case R.string.pk_show_x_cross_hints:
+                        // If the preference is now enabled, warn about its performance issues.
+                        if (Prefs.getBoolean(R.string.pk_show_x_cross_hints,
+                                R.bool.default_show_x_cross_hints)) {
                             new MaterialDialog.Builder(getActivity())
                                     .title(R.string.warning)
                                     .content(R.string.showHintsXCrossSummary)
@@ -132,25 +135,25 @@ public class SettingsActivity extends AppCompatActivity {
             super.onCreate(savedInstanceState);
             addPreferencesFromResource(R.xml.prefs);
 
-            find(this, R.string.pk_inspection_time)
+            find(this, R.string.pk_inspection_time_s)
                     .setOnPreferenceClickListener(clickListener);
             find(this, R.string.pk_open_timer_appearance_settings)
                     .setOnPreferenceClickListener(clickListener);
-            find(this, R.string.pk_show_scramble_x_cross_hints)
+            find(this, R.string.pk_show_x_cross_hints)
                     .setOnPreferenceClickListener(clickListener);
         }
 
-        private void createNumberDialog(@StringRes int title, final int prefKeyResID) {
+        private void createInspectionTimeDialog() {
             new MaterialDialog.Builder(getActivity())
-                    .title(title)
-                    .input("", String.valueOf(Prefs.getInt(prefKeyResID, 15)),
+                    .title(R.string.inspection_time)
+                    .input("", String.valueOf(Prefs.getInspectionTime()),
                             new MaterialDialog.InputCallback() {
                         @Override
                         public void onInput(@NonNull MaterialDialog dialog, CharSequence input) {
                             try {
                                 final int time = Integer.parseInt(input.toString());
 
-                                Prefs.edit().putInt(prefKeyResID, time).apply();
+                                Prefs.edit().putInt(R.string.pk_inspection_time_s, time).apply();
                             } catch (NumberFormatException e) {
                                 Toast.makeText(getActivity(),
                                         R.string.invalid_time, Toast.LENGTH_SHORT).show();
@@ -165,7 +168,8 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            Prefs.edit().putInt(prefKeyResID, 15).apply();
+                            // Remove the value and its default will be used when needed.
+                            Prefs.edit().remove(R.string.pk_inspection_time_s).apply();
                         }
                     })
                     .show();
@@ -178,32 +182,34 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public boolean onPreferenceClick(android.preference.Preference preference) {
                 switch (Prefs.keyToResourceID(preference.getKey(),
-                        R.string.pk_timer_text_size,
-                        R.string.pk_timer_text_offset,
-                        R.string.pk_scramble_image_size,
-                        R.string.pk_scramble_text_size,
+                        R.string.pk_timer_display_scale_pc,
+                        R.string.pk_timer_text_offset_px,
+                        R.string.pk_scramble_image_scale_pc,
+                        R.string.pk_scramble_text_scale_pc,
                         R.string.pk_advanced_timer_settings_enabled)) {
 
-                    case R.string.pk_timer_text_size:
-                        createSeekTextSizeDialog(R.string.pk_timer_text_size, 60, "12.34", true);
+                    case R.string.pk_timer_display_scale_pc:
+                        createTextScaleDialog(R.string.pk_timer_display_scale_pc,
+                                R.integer.default_timer_display_scale_pc, "12.34", 60, true);
                         break;
 
-                    case R.string.pk_timer_text_offset:
-                        createSeekTextOffsetDialog();
+                    case R.string.pk_timer_text_offset_px:
+                        createTextOffsetDialog();
                         break;
 
-                    case R.string.pk_scramble_image_size:
-                        createImageSeekDialog(
-                                R.string.pk_scramble_image_size, R.string.scrambleImageSize_text);
+                    case R.string.pk_scramble_text_scale_pc:
+                        createTextScaleDialog(R.string.pk_scramble_text_scale_pc,
+                                R.integer.default_scramble_text_scale_pc,
+                                "R U R' U' R' F R2 U' R' U' R U R' F'", 14, false);
                         break;
 
-                    case R.string.pk_scramble_text_size:
-                        createSeekTextSizeDialog(R.string.pk_scramble_text_size,
-                                14, "R U R' U' R' F R2 U' R' U' R U R' F'", false);
+                    case R.string.pk_scramble_image_scale_pc:
+                        createScrambleImageScaleDialog();
                         break;
 
                     case R.string.pk_advanced_timer_settings_enabled:
-                        if (Prefs.getBoolean(R.string.pk_advanced_timer_settings_enabled, false)) {
+                        if (Prefs.getBoolean(R.string.pk_advanced_timer_settings_enabled,
+                                R.bool.default_advanced_timer_settings_enabled)) {
                             new MaterialDialog.Builder(getActivity())
                                     .title(R.string.warning)
                                     .content(R.string.advanced_pref_summary)
@@ -220,38 +226,66 @@ public class SettingsActivity extends AppCompatActivity {
         @Override
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
+
             addPreferencesFromResource(R.xml.prefs_timer_appearance);
 
-            find(this, R.string.pk_timer_text_size).setOnPreferenceClickListener(clickListener);
-            find(this, R.string.pk_timer_text_offset).setOnPreferenceClickListener(clickListener);
-            find(this, R.string.pk_scramble_text_size).setOnPreferenceClickListener(clickListener);
-            find(this, R.string.pk_scramble_image_size).setOnPreferenceClickListener(clickListener);
+            find(this, R.string.pk_timer_display_scale_pc)
+                    .setOnPreferenceClickListener(clickListener);
+            find(this, R.string.pk_timer_text_offset_px)
+                    .setOnPreferenceClickListener(clickListener);
+            find(this, R.string.pk_scramble_text_scale_pc)
+                    .setOnPreferenceClickListener(clickListener);
+            find(this, R.string.pk_scramble_image_scale_pc)
+                    .setOnPreferenceClickListener(clickListener);
             find(this, R.string.pk_advanced_timer_settings_enabled)
                     .setOnPreferenceClickListener(clickListener);
         }
 
-        private void createSeekTextSizeDialog(
-                final int prefKeyResID, int defaultTextSize, String showText, boolean bold) {
+        /**
+         * Creates a dialog for setting the text scale. The preference value is a percentage of the
+         * default text size for the respective component, not an absolute text size. For example,
+         * if the default text size for the timer is 60 sp, the preference can be set to a value
+         * such as 150, to indicate that the preferred text size is 150% of 60 sp, or 90 sp. The
+         * scale value 150 is then stored in the preferences.
+         *
+         * @param prefKeyResID
+         *     The string resource ID of the integer preference that holds the current value and
+         *     that will be updated with the new value.
+         * @param prefDefaultResID
+         *     The integer resource ID of the default value for this integer preference.
+         * @param sampleText
+         *     The sample text to be displayed to guide the user when setting the scale.
+         * @param sampleTextSize
+         *     The size (in SIP) at which to display the sample text (i.e., the size that
+         *     corresponds to 100% on the scale).
+         * @param sampleIsBold
+         *     {@code true} to show the sample text in a bold typeface, or {@code false} to use
+         *     the default typeface.
+         */
+        private void createTextScaleDialog(
+                @StringRes final int prefKeyResID, @IntegerRes int prefDefaultResID,
+                String sampleText, final int sampleTextSize, boolean sampleIsBold) {
             final View dialogView = LayoutInflater.from(
                     getActivity()).inflate(R.layout.dialog_settings_progress, null);
-            final AppCompatSeekBar seekBar
+            final AppCompatSeekBar scaleBar
                     = (AppCompatSeekBar) dialogView.findViewById(R.id.seekbar);
-            final TextView text = (TextView) dialogView.findViewById(R.id.text);
-            seekBar.setMax(300);
-            seekBar.setProgress(Prefs.getInt(prefKeyResID, 100));
+            final TextView sample = (TextView) dialogView.findViewById(R.id.text);
 
-            text.setTextSize(TypedValue.COMPLEX_UNIT_SP, defaultTextSize);
-            final float defaultTextSizePx = text.getTextSize();
-            text.setTextSize(TypedValue.COMPLEX_UNIT_PX,
-                    defaultTextSizePx * (seekBar.getProgress() / 100f));
-            if (bold)
-                text.setTypeface(Typeface.DEFAULT_BOLD);
-            text.setText(showText);
+            scaleBar.setMax(300);
+            scaleBar.setProgress(Prefs.getInt(prefKeyResID, prefDefaultResID));
 
-            seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            sample.setTextSize(
+                    TypedValue.COMPLEX_UNIT_SP, sampleTextSize * scaleBar.getProgress() / 100f);
+            if (sampleIsBold) {
+                sample.setTypeface(Typeface.DEFAULT_BOLD);
+            }
+            sample.setText(sampleText);
+
+            scaleBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
-                public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-                    text.setTextSize(TypedValue.COMPLEX_UNIT_PX, defaultTextSizePx * (i / 100f));
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    sample.setTextSize(
+                            TypedValue.COMPLEX_UNIT_SP, sampleTextSize * progress / 100f);
                 }
 
                 @Override
@@ -271,11 +305,9 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            final int seekProgress = seekBar.getProgress();
-
-                            Prefs.edit()
-                                    .putInt(prefKeyResID, seekProgress > 10 ? seekProgress : 10)
-                                    .apply();
+                            // Save the scale, but ensure it is at least 10%.
+                            Prefs.edit().putInt(prefKeyResID,
+                                    Math.max(scaleBar.getProgress(), 10)).apply();
                         }
                     })
                     .neutralText(R.string.action_default)
@@ -283,24 +315,32 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            Prefs.edit().putInt(prefKeyResID, 100).apply();
+                            // Remove the value and its default will be used when needed.
+                            Prefs.edit().remove(prefKeyResID).apply();
                         }
                     })
                     .show();
         }
 
-        private void createSeekTextOffsetDialog() {
+        private void createTextOffsetDialog() {
             final View dialogView = LayoutInflater.from(
                     getActivity()).inflate(R.layout.dialog_settings_progress, null);
             final AppCompatSeekBar seekBar
                     = (AppCompatSeekBar) dialogView.findViewById(R.id.seekbar);
             final TextView text = (TextView) dialogView.findViewById(R.id.text);
-            seekBar.setMax(500);
-            seekBar.setProgress(Prefs.getInt(R.string.pk_timer_text_offset, 0) + 250);
+
+            // The offset is presented so that the center point on the scale represents an offset
+            // value of zero.
+            final int toCenter = 250;
+
+            seekBar.setMax(toCenter * 2);
+            seekBar.setProgress(
+                    Prefs.getInt(R.string.pk_timer_text_offset_px,
+                            R.integer.default_timer_text_offset_px) + toCenter);
 
             final float defaultY = text.getY();
 
-            text.setY(defaultY - (seekBar.getProgress() - 250));
+            text.setY(defaultY - seekBar.getProgress() - toCenter);
             text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 60);
             text.setTypeface(Typeface.DEFAULT_BOLD);
             text.setText("12.34");
@@ -310,7 +350,7 @@ public class SettingsActivity extends AppCompatActivity {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-                    text.setY(defaultY - (i - 250));
+                    text.setY(defaultY - (i - toCenter));
                 }
 
                 @Override
@@ -330,9 +370,8 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            Prefs.edit()
-                                    .putInt(R.string.pk_timer_text_offset,
-                                            seekBar.getProgress() - 250)
+                            Prefs.edit().putInt(R.string.pk_timer_text_offset_px,
+                                    seekBar.getProgress() - toCenter)
                                     .apply();
                         }
                     })
@@ -341,35 +380,40 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            Prefs.edit().putInt(R.string.pk_timer_text_offset, 0).apply();
+                            // Remove the preference and its default will be used when needed.
+                            Prefs.edit().remove(R.string.pk_timer_text_offset_px).apply();
                         }
                     })
                     .show();
         }
 
-        private void createImageSeekDialog(final int prefKeyResID, @StringRes int title) {
+        private void createScrambleImageScaleDialog() {
             final View dialogView = LayoutInflater.from(
                     getActivity()).inflate(R.layout.dialog_settings_progress_image, null);
-            final AppCompatSeekBar seekBar
+            final AppCompatSeekBar scaleBar
                     = (AppCompatSeekBar) dialogView.findViewById(R.id.seekbar);
             final View image = dialogView.findViewById(R.id.image);
-            seekBar.setMax(300);
-            seekBar.setProgress(Prefs.getInt(prefKeyResID, 100));
+            final int currentScale = Prefs.getInt(
+                    R.string.pk_scramble_image_scale_pc, R.integer.default_scramble_image_scale_pc);
 
-            final int defaultWidth = image.getLayoutParams().width;
+            scaleBar.setMax(300);
+            scaleBar.setProgress(currentScale);
+
+            final int defaultWidth  = image.getLayoutParams().width;
             final int defaultHeight = image.getLayoutParams().height;
 
-            image.getLayoutParams().width *= (seekBar.getProgress() / 100f);
-            image.getLayoutParams().height *= (seekBar.getProgress() / 100f);
+            image.getLayoutParams().width  *= currentScale / 100f;
+            image.getLayoutParams().height *= currentScale / 100f;
 
-
-            seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            scaleBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
-                public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-                    LinearLayout.LayoutParams params
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    final LinearLayout.LayoutParams params
                             = (LinearLayout.LayoutParams) image.getLayoutParams();
-                    params.width = (int) (defaultWidth * (i / 100f));
-                    params.height = (int) (defaultHeight * (i / 100f));
+
+                    params.width  = Math.round(defaultWidth  * progress / 100f);
+                    params.height = Math.round(defaultHeight * progress / 100f);
+
                     image.setLayoutParams(params);
                 }
 
@@ -390,10 +434,8 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            final int seekProgress = seekBar.getProgress();
-
-                            Prefs.edit()
-                                    .putInt(prefKeyResID, seekProgress > 10 ? seekProgress : 10)
+                            Prefs.edit().putInt(R.string.pk_scramble_image_scale_pc,
+                                    Math.max(scaleBar.getProgress(), 10))
                                     .apply();
                         }
                     })
@@ -402,7 +444,8 @@ public class SettingsActivity extends AppCompatActivity {
                         @Override
                         public void onClick(
                                 @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            Prefs.edit().putInt(prefKeyResID, 100).apply();
+                            // Remove value, so default will be used the next time it is retrieved.
+                            Prefs.edit().remove(R.string.pk_scramble_image_scale_pc).apply();
                         }
                     })
                     .show();

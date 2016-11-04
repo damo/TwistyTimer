@@ -1,12 +1,11 @@
 package com.aricneto.twistytimer.fragment.dialog;
 
-import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.graphics.drawable.DrawableCompat;
@@ -14,136 +13,75 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.widget.Button;
 import android.widget.TextView;
 
 import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.aricneto.twistify.R;
 import com.aricneto.twistytimer.activity.MainActivity;
+import com.aricneto.twistytimer.utils.FaceColor;
 import com.pes.androidmaterialcolorpickerdialog.ColorPicker;
 
 import butterknife.BindView;
+import butterknife.BindViews;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
 
 /**
- * Created by Ari on 09/02/2016.
+ * A dialog fragment for the customisation of the color-scheme of the cube images generated to
+ * show the scrambles.
  */
 public class SchemeSelectDialogMain extends DialogFragment {
 
     private Unbinder mUnbinder;
 
-    @BindView(R.id.top)   View top;
-    @BindView(R.id.left)  View left;
-    @BindView(R.id.front) View front;
-    @BindView(R.id.right) View right;
-    @BindView(R.id.back)  View back;
-    @BindView(R.id.down)  View down;
+    @BindViews({
+            R.id.up, R.id.down, R.id.left, R.id.right, R.id.front, R.id.back
+    }) View[] faces;
+
     @BindView(R.id.reset) TextView reset;
     @BindView(R.id.done)  TextView done;
+
+    private final View.OnClickListener clickListener = new View.OnClickListener() {
+        @Override
+        public void onClick(final View colorView) {
+            final FaceColor faceColor = FaceColor.forViewID(colorView.getId());
+            final int color = faceColor.getColor();
+            final ColorPicker picker = new ColorPicker(getActivity(),
+                    // Extract the R, G and B components of the color.
+                    (color >>> 16) & 0xff, (color >>> 8) & 0xff, color & 0xff);
+
+            // Show color picker dialog
+            picker.show();
+
+            // On Click listener for the dialog, when the user select the color
+            picker.findViewById(R.id.okColorButton).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View ignored) {
+                    final int color = picker.getColor();
+
+                    setColor(colorView, color); // Set the new color of the view.
+                    faceColor.putColor(color);  // Save the new color to the shared preferences.
+                    picker.dismiss();
+                }
+            });
+        }
+    };
 
     public static SchemeSelectDialogMain newInstance() {
         return new SchemeSelectDialogMain();
     }
 
-    private View.OnClickListener clickListener = new View.OnClickListener() {
-        @Override
-        public void onClick(final View view) {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
-            final SharedPreferences.Editor editor = sp.edit();
-            String currentHex = "FFFFFF";
-            switch (view.getId()) {
-                case R.id.top:
-                    currentHex = sp.getString("cubeTop", "FFFFFF");
-                    break;
-                case R.id.left:
-                    currentHex = sp.getString("cubeLeft", "FF8B24");
-                    break;
-                case R.id.front:
-                    currentHex = sp.getString("cubeFront", "02D040");
-                    break;
-                case R.id.right:
-                    currentHex = sp.getString("cubeRight", "EC0000");
-                    break;
-                case R.id.back:
-                    currentHex = sp.getString("cubeBack", "304FFE");
-                    break;
-                case R.id.down:
-                    currentHex = sp.getString("cubeDown", "FDD835");
-                    break;
-            }
-
-
-            final ColorPicker picker = new ColorPicker(getActivity(),
-                    Integer.parseInt(currentHex.substring(0, 2), 16),
-                    Integer.parseInt(currentHex.substring(2, 4), 16),
-                    Integer.parseInt(currentHex.substring(4), 16));
-
-            /* Show color picker dialog */
-            picker.show();
-
-    /* On Click listener for the dialog, when the user select the color */
-            Button okColor = (Button) picker.findViewById(R.id.okColorButton);
-            okColor.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-
-                    String hexColor = Integer.toHexString(picker.getColor()).substring(2);
-                    switch (view.getId()) {
-                        case R.id.top:
-                            setColor(top, Color.parseColor("#" + hexColor));
-                            editor.putString("cubeTop", hexColor);
-                            break;
-                        case R.id.left:
-                            setColor(left, Color.parseColor("#" + hexColor));
-                            editor.putString("cubeLeft", hexColor);
-                            break;
-                        case R.id.front:
-                            setColor(front, Color.parseColor("#" + hexColor));
-                            editor.putString("cubeFront", hexColor);
-                            break;
-                        case R.id.right:
-                            setColor(right, Color.parseColor("#" + hexColor));
-                            editor.putString("cubeRight", hexColor);
-                            break;
-                        case R.id.back:
-                            setColor(back, Color.parseColor("#" + hexColor));
-                            editor.putString("cubeBack", hexColor);
-                            break;
-                        case R.id.down:
-                            setColor(down, Color.parseColor("#" + hexColor));
-                            editor.putString("cubeDown", hexColor);
-                            break;
-                    }
-                    editor.apply();
-                    picker.dismiss();
-                }
-            });
-
-        }
-    };
-
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(
+            LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View dialogView = inflater.inflate(R.layout.dialog_scheme_select_main, container);
         mUnbinder = ButterKnife.bind(this, dialogView);
 
-        final SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
-
-        setColor(top, Color.parseColor("#" + sp.getString("cubeTop", "FFFFFF")));
-        setColor(left, Color.parseColor("#" + sp.getString("cubeLeft", "FF8B24")));
-        setColor(front, Color.parseColor("#" + sp.getString("cubeFront", "02D040")));
-        setColor(right, Color.parseColor("#" + sp.getString("cubeRight", "EC0000")));
-        setColor(back, Color.parseColor("#" + sp.getString("cubeBack", "304FFE")));
-        setColor(down, Color.parseColor("#" + sp.getString("cubeDown", "FDD835")));
-
-        top.setOnClickListener(clickListener);
-        left.setOnClickListener(clickListener);
-        front.setOnClickListener(clickListener);
-        right.setOnClickListener(clickListener);
-        back.setOnClickListener(clickListener);
-        down.setOnClickListener(clickListener);
+        for (View face : faces) {
+            setColor(face, FaceColor.forViewID(face.getId()).getColor());
+            face.setOnClickListener(clickListener);
+        }
 
         reset.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -154,21 +92,13 @@ public class SchemeSelectDialogMain extends DialogFragment {
                         .negativeText(R.string.action_cancel)
                         .onPositive(new MaterialDialog.SingleButtonCallback() {
                             @Override
-                            public void onClick(MaterialDialog dialog, DialogAction which) {
-                                SharedPreferences.Editor editor = sp.edit();
-                                editor.putString("cubeTop", "FFFFFF");
-                                editor.putString("cubeLeft", "EF6C00");
-                                editor.putString("cubeFront", "02D040");
-                                editor.putString("cubeRight", "EC0000");
-                                editor.putString("cubeBack", "304FFE");
-                                editor.putString("cubeDown", "FDD835");
-                                editor.apply();
-                                setColor(top, Color.parseColor("#FFFFFF"));
-                                setColor(left, Color.parseColor("#EF6C00"));
-                                setColor(front, Color.parseColor("#02D040"));
-                                setColor(right, Color.parseColor("#EC0000"));
-                                setColor(back, Color.parseColor("#304FFE"));
-                                setColor(down, Color.parseColor("#FDD835"));
+                            public void onClick(
+                                    @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                                FaceColor.resetAllColors(); // Remove all the shared preferences.
+
+                                for (View face : faces) {
+                                    setColor(face, FaceColor.forViewID(face.getId()).getColor());
+                                }
                             }
                         })
                         .show();

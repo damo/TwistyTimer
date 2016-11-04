@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Attributes for custom widgets used in layout XML resources.
+-->
+<resources>
+
+    <!--
+    The "TimerWidget" presents the inspection countdown and solve timer, highlighting the color of
+    the text in response to changes to the state of the timer.
+    -->
+    <declare-styleable name="TimerWidget">
+        <attr name="normalTextColor" format="reference|color"/>
+        <attr name="cueTextColor"    format="reference|color"/>
+        <!--
+        The maximum height of the time value text when the timer is running. The widget will be
+        slightly higher than this value to accommodate the "headline" above the time text. This
+        maximum may be reduced automatically if necessary to allow the widget to fit within the
+        bounds imposed on it by its parent layout.
+        -->
+        <attr name="maxTimeHeight"   format="dimension"/>
+    </declare-styleable>
+
+</resources>

@@ -11,4 +11,10 @@
     <item name="verticalDivider02" type="id"/>
     <item name="verticalDivider03" type="id"/>
 
+    <!--
+    Some problems in the layout editor if (maybe) an ID is defined with "@+id/..." in a custom
+    attribute.
+    -->
+    <item name="solve_hints_panel"   type="id"/>
+
 </resources>

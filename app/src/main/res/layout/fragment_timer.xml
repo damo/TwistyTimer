@@ -1,4 +1,5 @@
-<com.sothree.slidinguppanel.SlidingUpPanelLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.sothree.slidinguppanel.SlidingUpPanelLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/sliding_layout"
@@ -7,25 +8,27 @@
     android:gravity="bottom"
     android:keepScreenOn="true"
     app:umanoPanelHeight="0dp"
-    app:umanoScrollableView="@+id/scrollPanel"
-    app:umanoShadowHeight="4dp">
+    app:umanoScrollableView="@id/solve_hints_panel"
+    app:umanoShadowHeight="4dp"
+    tools:context="com.aricneto.twistytimer.fragment.TimerFragment">
 
+    <!--
+    Enable "android:animateLayoutChanges", so that the quick-action buttons, statistics, hints,
+    etc. will fade in and out nicely when their visibility is changed. It saves a lot of coding.
+    Beware that if a view goes from "GONE" to "INVISIBLE" the transition may be animated! To avoid
+    this, just use "VISIBLE" and "INVISIBLE" here in the layout and in the code, unless there is a
+    real need to use "GONE".
+    -->
     <RelativeLayout
         android:id="@+id/root"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="?mainColorBackground"
-        tools:context="com.aricneto.twistytimer.fragment.TimerFragment">
+        android:animateLayoutChanges="true">
 
-        <!-- The margin is there so that opening the drawer doesn't start the timer -->
-        <FrameLayout
-            android:id="@+id/startTimerLayout"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginLeft="16dp" />
-
+        <!-- The animated background shown when a personal best time is achieved. -->
         <com.skyfishjy.library.RippleBackground
-            android:id="@+id/rippleBackground"
+            android:id="@+id/ripple_background"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="false"
@@ -35,88 +38,49 @@
             app:rb_rippleAmount="1"
             app:rb_scale="10" />
 
-        <android.support.v7.widget.CardView
-            android:id="@+id/hintCard"
+        <!--
+        A proxy view that provides touch input to the "TimerWidget". This (nearly) full screen
+        view will relay touch inputs to the timer making starting and (more importantly) stopping
+        the timer much easier. This view is defined early, to ensure that it is "underneath" the
+        foreground views and does not capture touches intended for those other views.
+
+        The dimension "timer_touch_proxy_margin" will be applied in code when the timer is not
+        running to pass through touch events when the user is (probably) only trying to open the
+        side drawer menu. When the timer is running, all touch events will be intercepted, so
+        touching the side of the screen will still stop the timer.
+        -->
+        <FrameLayout
+            android:id="@+id/timer_touch_proxy"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_alignParentTop="true"
-            android:visibility="gone"
-            app:cardBackgroundColor="?colorPrimaryDark"
-            app:cardElevation="4dp">
-
-            <TextView
-                android:id="@+id/archive_button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:drawableLeft="@drawable/ic_lightbulb_outline_white_18dp"
-                android:drawableRight="@drawable/spacer_18dp"
-                android:gravity="center"
-                android:padding="8dp"
-                android:text="@string/hint"
-                android:textColor="@android:color/white" />
-
-
-        </android.support.v7.widget.CardView>
-
-        <TextView
-            android:id="@+id/scrambleText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignWithParentIfMissing="true"
-            android:layout_below="@id/hintCard"
-            android:layout_centerHorizontal="true"
-            android:layout_marginLeft="16dp"
-            android:layout_marginRight="16dp"
-            android:layout_marginTop="16dp"
-            android:gravity="center_horizontal"
-            android:text="Generating..."
-            android:textColor="?colorTimerText"
-            android:textSize="14sp"
-            tools:text="3R' 3F2 U' 2U' 2R' 2U' 3D2 L2 U 2D' R2 2B' D B' D 2L 2U' R' F' 2L F' 2D L 3F2 L' 2L 3L' R2 U' 2D' F2 3F' 2L' 2F' 2B' 3U 2F 3F2 L 3L' R 2U D' 3B 2D' 2L' R' 3D2 2R' 3U2 3B 3U' 3F 3B B2 2R D 3B2 3L2 3D' 2R' 2U F D' 3B' L' 2R2 R F2 2F2 3F 3B 2B' B' L R2 3B L 2L2 3L U' 3U2 3F 3D R D 2L B' U 3L' 3U2 3F' L U 2F2 B2 2L2 3F2 2L2 3D2" />
+            android:layout_height="match_parent" />
 
         <!--
-        "android:textColorHighlight" is normally used when selecting text, but will be used instead
-        to highlight the time value text for the start cue or hold-for-start behaviour. Selection
-        of the text is disabled to avoid any conflicts.
+        The layout for the cross-hints panel and the scramble text view are very different between
+        landscape and portrait orientations. There is no nice way to include them from their "merge"
+        element and set the required "RelativeLayout" attributes on this "include" element, so the
+        attributes are set within the included file. This is harder to maintain, but is unavoidable.
         -->
-        <com.aricneto.twistytimer.layout.ChronometerMilli
-            android:id="@+id/chronometer"
+        <include
+            layout="@layout/fragment_timer_x_hints_and_scramble" />
+
+        <com.aricneto.twistytimer.timer.TimerWidget
+            android:id="@+id/timer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
-            android:layout_marginBottom="0dp"
-            android:gravity="center"
-            android:textColor="?colorTimerText"
-            android:textColorHighlight="?colorAccent"
-            android:textSize="60sp"
-            android:textStyle="bold"
-            android:textIsSelectable="false" />
+            android:layout_marginTop="@dimen/timer_widget_tb_margin"
+            android:layout_marginBottom="@dimen/timer_widget_tb_margin"
+
+            app:normalTextColor="?colorTimerText"
+            app:cueTextColor="?colorAccent"
+            app:maxTimeHeight="@dimen/timer_widget_time_height" />
 
         <TextView
-            android:id="@+id/inspectionText"
+            android:id="@+id/congrats_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_above="@id/chronometer"
+            android:layout_above="@id/timer"
             android:layout_centerHorizontal="true"
-            android:layout_marginLeft="16dp"
-            android:layout_marginRight="16dp"
-            android:layout_marginTop="16dp"
-            android:gravity="center_horizontal"
-            android:text="@string/inspection"
-            android:textAllCaps="true"
-            android:textColor="?colorTimerText"
-            android:textStyle="bold"
-            android:visibility="gone"
-            tools:visibility="gone" />
-
-        <TextView
-            android:id="@+id/congratsText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_above="@id/chronometer"
-            android:layout_centerHorizontal="true"
-            android:layout_marginBottom="8dp"
             android:layout_marginLeft="16dp"
             android:layout_marginRight="16dp"
             android:layout_marginTop="16dp"
@@ -125,151 +89,119 @@
             android:text="@string/personal_best_message"
             android:textColor="?colorTimerText"
             android:textStyle="bold"
-            android:visibility="gone"
+            android:visibility="invisible"
             tools:visibility="visible" />
 
         <LinearLayout
             android:id="@+id/quick_action_buttons"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_below="@id/chronometer"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="8dp"
+            android:layout_below="@id/timer"
             android:gravity="center"
+            android:animateLayoutChanges="true"
             android:visibility="invisible"
             tools:visibility="visible">
 
+            <!--
+            The quick-action buttons may show icons or text. There is a user preference to show
+            larger buttons. The default icon size is 24x24 dp and the larger icon size is 36x36 dp.
+            Setting the text size to 18 dp and 27 dp respectively gives acceptable results.
+            -->
             <ImageView
                 android:id="@+id/button_delete"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginRight="16dp"
+                android:layout_marginRight="12dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:padding="8dp"
                 android:src="@drawable/ic_delete_white_24dp"
-                android:tint="?colorTimerText" />
+                android:tint="?colorTimerText"/>
 
-            <ImageView
+            <TextView
                 android:id="@+id/button_dnf"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginRight="16dp"
+                android:layout_marginRight="12dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:padding="8dp"
-                android:src="@drawable/dnf"
-                android:tint="?colorTimerText" />
+                android:text="+DNF"
+                android:textSize="@dimen/qab_text_size_normal"
+                android:textStyle="bold"
+                android:textColor="?colorTimerText"/>
 
-            <ImageView
-                android:id="@+id/button_plustwo"
+            <TextView
+                android:id="@+id/button_plus_two"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginRight="12dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:padding="8dp"
-                android:src="@drawable/plustwo"
-                android:tint="?colorTimerText" />
+                android:text="+2"
+                android:textSize="@dimen/qab_text_size_normal"
+                android:textStyle="bold"
+                android:textColor="?colorTimerText"/>
+
+            <TextView
+                android:id="@+id/button_minus_two"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="12dp"
+                android:layout_gravity="center_vertical"
+                android:background="?android:attr/selectableItemBackground"
+                android:clickable="true"
+                android:enabled="false"
+                android:padding="8dp"
+                android:text="-2"
+                android:textSize="@dimen/qab_text_size_normal"
+                android:textStyle="bold"
+                android:textColor="?colorTimerText"/>
 
             <ImageView
                 android:id="@+id/button_comment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="16dp"
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:padding="8dp"
                 android:src="@drawable/ic_comment_white_24dp"
-                android:tint="?colorTimerText" />
-
+                android:tint="?colorTimerText"/>
 
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/button_undo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/chronometer"
-            android:layout_centerHorizontal="true"
-            android:layout_marginRight="16dp"
-            android:layout_marginTop="8dp"
-            android:background="?android:attr/selectableItemBackground"
-            android:clickable="true"
-            android:padding="8dp"
-            android:src="@drawable/ic_undo_24dp"
-            android:tint="?colorTimerText"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <LinearLayout
-            android:id="@+id/detailLayout"
+        <!--
+        The layout of the session statistics is 2-column for portrait and 1-column for landscape,
+        so a separate layout is defined for each orientation and included here.
+        -->
+        <include
+            layout="@layout/fragment_timer_stats"
+            android:id="@+id/session_stats_panel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:layout_alignParentRight="true"
-            android:layout_alignWithParentIfMissing="true"
             android:layout_marginBottom="8dp"
-            android:layout_marginRight="16dp">
-
-            <TextView
-                android:id="@+id/sessionDetailTextAvg"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="8dp"
-                android:gravity="right"
-                android:text="@string/detail_text_avg"
-                android:textColor="?colorTimerDetailText"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/sessionDetailTimesAvg"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="8dp"
-                android:gravity="left"
-                android:text="--\n--\n--\n--"
-                android:textColor="?colorTimerDetailText"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/sessionDetailTextMore"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="16dp"
-                android:gravity="right"
-                android:text="@string/detail_text_more"
-                android:textColor="?colorTimerDetailText"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/sessionDetailTimesMore"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="8dp"
-                android:gravity="left"
-                android:text="--\n--\n--\n--"
-                android:textColor="?colorTimerDetailText"
-                android:textSize="13sp" />
-
-        </LinearLayout>
+            android:layout_marginRight="16dp" />
 
         <ImageView
-            android:id="@+id/scrambleImg"
+            android:id="@+id/scramble_image"
             android:layout_width="84dp"
             android:layout_height="84dp"
-            android:layout_alignBottom="@id/detailLayout"
+            android:layout_alignBottom="@id/session_stats_panel"
             android:layout_alignParentLeft="true"
             android:layout_marginLeft="8dp"
             android:scaleType="fitStart"
             tools:background="@color/red_material" />
 
         <me.zhanghai.android.materialprogressbar.MaterialProgressBar
-            android:id="@+id/progressSpinner"
+            android:id="@+id/progress_spinner"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:layout_alignParentLeft="true"
-            android:layout_alignWithParentIfMissing="true"
             android:layout_margin="16dp"
             android:indeterminate="true"
             android:visibility="gone"
@@ -283,10 +215,11 @@
             android:layout_height="match_parent"
             android:layout_centerInParent="true"
             android:visibility="gone" />
+
     </RelativeLayout>
 
     <ScrollView
-        android:id="@id/scrollPanel"
+        android:id="@id/solve_hints_panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@color/white_text">
@@ -307,34 +240,34 @@
                 android:paddingLeft="8dp"
                 android:paddingRight="8dp"
                 android:text="@string/panel_swipe_down_to_hide"
-                android:textStyle="bold" />
+                android:textStyle="bold"/>
 
             <me.zhanghai.android.materialprogressbar.MaterialProgressBar
-                android:id="@+id/panelSpinner"
+                android:id="@+id/hintProgress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:indeterminate="true"
                 android:visibility="gone"
-                app:mpb_progressStyle="circular" />
+                app:mpb_progressStyle="circular"/>
 
             <TextView
-                android:id="@+id/panelSpinnerText"
+                android:id="@+id/hintProgressText"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:padding="16dp"
                 android:text="@string/loading_hints"
-                android:textSize="16sp" />
+                android:textSize="16sp"/>
 
             <TextView
-                android:id="@+id/panelText"
+                android:id="@+id/hintText"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="top|left"
                 android:padding="16dp"
                 android:text=""
-                android:textSize="16sp" />
+                android:textSize="16sp"/>
 
         </LinearLayout>
 

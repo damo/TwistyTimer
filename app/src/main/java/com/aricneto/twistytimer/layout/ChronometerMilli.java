@@ -8,16 +8,15 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemClock;
-import android.text.Html;
+import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.widget.TextView;
 
 import com.aricneto.twistify.R;
+import com.aricneto.twistytimer.items.Penalties;
+import com.aricneto.twistytimer.items.Penalty;
 import com.aricneto.twistytimer.utils.Prefs;
-import com.aricneto.twistytimer.utils.PuzzleUtils;
-
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
+import com.aricneto.twistytimer.utils.TimeUtils;
 
 /**
  * A chronometer for twisty puzzles of all types. This supports timing in milliseconds, display of
@@ -30,43 +29,14 @@ public class ChronometerMilli extends TextView {
     private static final String TAG = "Chronometer";
 
     /**
-     * Low resolution time format for times of one hour or greater.
-     */
-    private static final String TIME_FMT_HOURS_LR = "k':'mm'<small>:'ss'</small>'";
-
-    /**
-     * Low resolution time format for times from one minute (inclusive) to one hour (exclusive).
-     */
-    private static final String TIME_FMT_MINS_LR = "m'<small>:'ss'</small>'";
-
-    /**
-     * Low resolution time format for times less than one minute.
-     */
-    private static final String TIME_FMT_SECS_LR = "s";
-
-    /**
-     * High resolution time format for times from one minute (inclusive) to one hour (exclusive).
-     */
-    private static final String TIME_FMT_MINS_HR = "m':'ss'<small>.'SS'</small>'";
-
-    /**
-     * High resolution time format for times less than one minute.
-     */
-    private static final String TIME_FMT_SECS_HR = "s'<small>.'SS'</small>'";
-
-    /**
-     * The penalty time in milliseconds for a standard "+2" penalty.
-     */
-    private static final long TWO_SECOND_PENALTY_MS = 2_000L;
-
-    /**
      * The number of milliseconds between updates to the displayed of a low-resolution elapsed time.
+     * Low resolution times are typically displayed to whole seconds.
      */
     private static final long TICK_TIME_LR = 100L; // 0.1 seconds to avoid jerkiness.
 
     /**
      * The number of milliseconds between updates to the displayed of a high-resolution elapsed
-     * time.
+     * time. High resolution times are typically displayed to 100ths of a second.
      */
     private static final long TICK_TIME_HR = 10L; // 0.01 seconds (100 fps). Probably overkill.
 
@@ -88,13 +58,36 @@ public class ChronometerMilli extends TextView {
     private long mStoppedAt;
 
     /**
-     * The code for additional penalty. Values from {@link PuzzleUtils} are supported.
+     * The penalty applied to this solve time.
      */
-    private int mPenalty;
+    @NonNull
+    private Penalty mPenalty = Penalty.NONE;
 
-    private boolean mIsVisible;
-    private boolean mIsStarted;
+    /**
+     * Indicates if the chronometer has been started and is now running and measuring elapsed time.
+     */
     private boolean mIsRunning;
+
+    /**
+     * Indicates if the chronometer's recorded time has been annulled. This flag is cleared when
+     * the chronometer is next reset or started.
+     */
+    private boolean mIsAnnulled;
+
+    /**
+     * Indicates if the chronometer view is currently visible on the screen or not. This is not
+     * the same as {@code View.isVisible() == View.VISIBLE}, as a view can be marked {@code VISIBLE}
+     * whether it is on the screen or not.
+     */
+    private boolean mIsVisibleOnScreen;
+
+    /**
+     * Indicates if the chronometer is running (see {@link #mIsRunning}), is visible on the screen
+     * (see {@link #mIsVisibleOnScreen}) and the handler used to update the time value on the screen
+     * should continue to do so. If this is reset, the time updates on the screen will stop (though
+     * the chronometer could still be running off screen).
+     */
+    private boolean mIsUpdatingTimeOnScreen;
 
     /**
      * Indicates if this chronometer is holding in readiness to be started once the minimum hold
@@ -141,8 +134,10 @@ public class ChronometerMilli extends TextView {
         // The implementation assumes that different colors for different states will not be used.
         mNormalColor = getCurrentTextColor();
 
-        mShowHiRes = Prefs.getBoolean(R.string.pk_show_hi_res_timer, true);
-        hideTimeEnabled = Prefs.getBoolean(R.string.pk_hide_time_while_running, false);
+        mShowHiRes = Prefs.getBoolean(
+                R.string.pk_show_hi_res_timer, R.bool.default_show_hi_res_timer);
+        hideTimeEnabled = Prefs.getBoolean(
+                R.string.pk_hide_time_while_running, R.bool.default_hide_time_while_running);
         hideTimeText = getContext().getString(R.string.hideTimeText);
 
         // The initial state will cause "0.00" to be displayed.
@@ -162,45 +157,75 @@ public class ChronometerMilli extends TextView {
     }
 
     /**
-     * Indicates if this chronometer has been started. If started, it can be stopped, but it cannot
-     * be started again or reset until it has been stopped. This should be tested before calling
+     * Indicates if this chronometer has been started and is now running and measuring the elapsed
+     * time since being started. If started and running, it can be stopped, but it cannot be
+     * started again or reset until it has been stopped. This should be tested before calling
      * {@link #start()}, {@link #stop()} or {@link #reset()}, if the state is not already known.
      *
      * @return
-     *     {@code true} if this chronometer has been started; or {@code false} if it has not been
-     *     started.
+     *     {@code true} if this chronometer has been started and is running; or {@code false} if it
+     *     has not been started.
      */
-    public boolean isStarted() {
-        return mIsStarted;
+    public boolean isRunning() {
+        return mIsRunning;
     }
 
     /**
-     * Gets the elapsed time (in milliseconds) measured by this chronometer including any additional
-     * time penalty. This method may be called even if this chronometer is currently started. Any
-     * penalty time set by {@link #setPenalty(int)} will be included in the reported elapsed time.
-     * If a "DNF" penalty was applied, the elapsed time will be reported as zero.
+     * Indicates if the chronometer was annulled with a call to {@link #annul()}. This will be
+     * cleared if either {@link #start()} or {@link #reset()} is called.
      *
      * @return
-     *     The elapsed time measured by this chronometer including any time penalty, or zero if
-     *     the penalty is a "DNF".
+     *     {@code true} if the chronometer was annulled; or {@code false} if it was not.
+     */
+    public boolean isAnnulled() {
+        return mIsAnnulled;
+    }
+
+    /**
+     * <p>
+     * Gets the elapsed time (in milliseconds) measured by this chronometer including any additional
+     * time penalties. This method may be called even if this chronometer is currently started. Any
+     * penalty times set by {@link #setPenalty(Penalty)} will be included in the reported elapsed
+     * time.
+     * </p>
+     * <p>
+     * If a "DNF" penalty was applied, the elapsed time will be reported <i>as recorded</i>. For
+     * example, if a DNF is applied after the timer is stopped, then the time elapsed when the
+     * timer was stopped is still reported by this method. However, if a DNF is applied before the
+     * timer is started, such as when the inspection period times out, then the reported time will
+     * be zero.
+     * </p>
+     * <p>
+     * Recording the elapsed time for a DNF is useful if ever there is a need to calculate the
+     * cumulative time. WCA Regulations A1a2: "Cumulative time limits may be enforced (e.g. 3
+     * results with a cumulative time limit of 20 minutes). The time elapsed in a DNF result counts
+     * towards the cumulative time limit." Also WCA Guidelines A1a2+: "In case of a cumulative
+     * time limit, the judge records the original recorded time for a DNF on the score sheet in
+     * parentheses, e.g. "DNF (1:02.27)". In this app, a simple enhancement would be to report the
+     * cumulative elapsed solving time for the current session, or for all time. Recording the
+     * elapsed time for all DNF finishes is necessary to make such reports meaningful.
+     * </p>
+     *
+     * @return
+     *     The elapsed time measured by this chronometer including any time penalties. This is the
+     *     exact elapsed time with millisecond precision; it is not rounded.
      */
     public long getElapsedTime() {
         switch (mPenalty) {
-            case PuzzleUtils.PENALTY_DNF:
-                return 0L;
-
-            case PuzzleUtils.PENALTY_PLUSTWO:
-                return getElapsedTimeExcludingPenalties() + TWO_SECOND_PENALTY_MS;
-
             default:
+            case NONE:
+            case DNF:
                 return getElapsedTimeExcludingPenalties();
+
+            case PLUS_TWO:
+                return getElapsedTimeExcludingPenalties() + Penalties.PLUS_TWO_DURATION_MS;
         }
     }
 
     /**
      * Gets the elapsed time (in milliseconds) measured by this chronometer excluding any additional
      * time penalties. This method may be called even if this chronometer is currently started. Any
-     * penalty time set by {@link #setPenalty(int)} will <i>not</i> be included in the reported
+     * penalty time set by {@link #setPenalty(Penalty)} will <i>not</i> be included in the reported
      * elapsed time.
      *
      * @return The elapsed time measured by this chronometer excluding penalties.
@@ -210,7 +235,7 @@ public class ChronometerMilli extends TextView {
         // "mStartedAt". If the chronometer has never been started, has been stopped, or has been
         // reset, then the difference between "mStoppedAt" and "mStartedAt" is used. This ensures
         // that the initial state or reset state will display "0.00".
-        return (mIsStarted ? SystemClock.elapsedRealtime() : mStoppedAt) - mStartedAt;
+        return (mIsRunning ? SystemClock.elapsedRealtime() : mStoppedAt) - mStartedAt;
     }
 
     /**
@@ -219,13 +244,14 @@ public class ChronometerMilli extends TextView {
      * be restored. If {@link #start()} is called subsequently, the recorded elapsed time and any
      * penalties will <i>not</i> be reset automatically, so be sure to call {@link #reset()} first,
      * if appropriate. Both of those methods also exit this state, so {@code cancelHoldForStart()}
-     * will no longer have any effect.
+     * will no longer have any effect. This method does not affect the annulled state reported by
+     * {@link #isAnnulled()}.
      *
      * @throws IllegalStateException
      *     If the chronometer is already started.
      */
     public void holdForStart() {
-        if (mIsStarted) {
+        if (mIsRunning) {
             // There is no use case where the chronometer will be held *before* starting when it is
             // *already* started, so throw an exception to highlight a likely bug in the caller.
             throw new IllegalStateException("Cannot hold chronometer if already started.");
@@ -250,7 +276,7 @@ public class ChronometerMilli extends TextView {
     /**
      * Cancels the hold-for-start state and restores the value previously displayed by this
      * chronometer. If the chronometer is not in the hold-for-start state, this method will have
-     * no effect.
+     * no effect. This does <i>not</i> raise {@link #isAnnulled()}.
      */
     public void cancelHoldForStart() {
         if (mIsHoldingForStart) {
@@ -283,7 +309,7 @@ public class ChronometerMilli extends TextView {
      * saved when that state was entered will not be restored.
      */
     public void start() {
-        if (mIsStarted) {
+        if (mIsRunning) {
             return;
         }
 
@@ -296,7 +322,8 @@ public class ChronometerMilli extends TextView {
         // time in the elapsed time offset, it will remain separate.
         mStartedAt = SystemClock.elapsedRealtime() - getElapsedTimeExcludingPenalties();
         mStoppedAt = 0L;
-        mIsStarted = true;
+        mIsRunning = true;
+        mIsAnnulled = false;
 
         // If we were holding for a start, stop doing that now and discard any saved text.
         endHoldForStart();
@@ -314,11 +341,11 @@ public class ChronometerMilli extends TextView {
      *     If the chronometer is already started.
      */
     public void stop() {
-        if (!mIsStarted) {
+        if (!mIsRunning) {
             return;
         }
 
-        mIsStarted = false;
+        mIsRunning = false;
         mStoppedAt = SystemClock.elapsedRealtime();
 
         // Update the text to show the exact elapsed time at this precise moment.
@@ -337,7 +364,7 @@ public class ChronometerMilli extends TextView {
      *     If the chronometer is currently started.
      */
     public void reset() throws IllegalStateException {
-        if (mIsStarted) {
+        if (mIsRunning) {
             // There is no use case where the chronometer will be reset without first being
             // stopped, so throw an exception to highlight a likely bug in the caller.
             throw new IllegalStateException("Chronometer cannot be reset if it has been started.");
@@ -345,7 +372,8 @@ public class ChronometerMilli extends TextView {
 
         mStartedAt = 0L;
         mStoppedAt = 0L;
-        mPenalty = PuzzleUtils.NO_PENALTY;
+        mPenalty = Penalty.NONE;
+        mIsAnnulled = false;
 
         // If we were holding for a start, stop doing that now and discard any saved text.
         endHoldForStart();
@@ -355,31 +383,41 @@ public class ChronometerMilli extends TextView {
     }
 
     /**
+     * <p>
+     * Annuls the timer's recorded time and resets the time to zero. If the chronometer is running,
+     * it will first be stopped. This will also exit the "hold-for-start" state if it is active;
+     * the displayed text value saved when that state was entered will not be restored. Once
+     * annulled {@link #isAnnulled()} will return {@code true} until either {@link #start()} or
+     * {@link #reset()} is called.
+     * </p>
+     * <p>
+     * The annul operation essentially stops the timer if it is running and then resets it. The
+     * only difference is that {@link #isAnnulled()} is raised. This allows a recorded time (which
+     * has been reset to zero by this operation) to be marked as one that should be disregarded,
+     * not saved.
+     * </p>
+     */
+    public void annul() throws IllegalStateException {
+        if (mIsRunning) {
+            stop();
+        }
+
+        reset(); // Clears the "mIsAnnulled" flag, so do this before raising the flag again.
+        mIsAnnulled = true;
+    }
+
+    /**
      * Sets a penalty to be applied to the currently recorded elapsed time. If a 2-second penalty
      * is applied, a "+" is appended to the display of the elapsed time to indicate that a penalty
      * time has been added and {@link #getElapsedTime()} will include the extra penalty. If a
      * did-not-finish penalty is set, "DNF" is displayed. Any previously set penalty is replaced
-     * by the new penalty. The {@code NO_PENALTY} value can also be set to remove a 2-second or
-     * DNF penalty and restore the elapsed time.
+     * by the new penalty. {@code Penalty.NONE} can also be set to remove a 2-second or DNF penalty
+     * and restore the elapsed time.
      *
-     * @param penalty
-     *     The code for the penalty to be applied. Use only {@link PuzzleUtils#NO_PENALTY},
-     *     {@link PuzzleUtils#PENALTY_PLUSTWO} or {@link PuzzleUtils#PENALTY_DNF}.
-     *
-     * @throws IllegalArgumentException
-     *     If the penalty code is not one of those supported by this method.
+     * @param penalty The the penalty to be applied.
      */
-    public void setPenalty(int penalty) {
-        switch (penalty) {
-            case PuzzleUtils.NO_PENALTY:
-            case PuzzleUtils.PENALTY_PLUSTWO:
-            case PuzzleUtils.PENALTY_DNF:
-                mPenalty = penalty;
-                break;
-
-            default:
-                throw new IllegalArgumentException("Penalty code is not allowed.");
-        }
+    public void setPenalty(@NonNull Penalty penalty) {
+        mPenalty = penalty;
 
         // Show the new time with the included penalty and the "+" penalty indicator, if needed.
         updateText();
@@ -411,44 +449,30 @@ public class ChronometerMilli extends TextView {
      *     used to inform the necessary update frequency.
      */
     private synchronized boolean updateText() {
-        // The displayed elapsed time will include any time penalty. If holding before starting,
-        // then assume that the elapsed time will be started at zero and ignore the previously
-        // recorded elapsed time and any current penalty.
-        String timeText;
+        final CharSequence timeText; // May be "String" or "Spannable".
         final boolean isHiRes;
 
-        if (mIsStarted && hideTimeEnabled) {
+        if (mIsRunning && hideTimeEnabled) {
             timeText = hideTimeText;
-            isHiRes = false;
-        } else if (!mIsHoldingForStart && mPenalty == PuzzleUtils.PENALTY_DNF) {
-            timeText = "DNF";
-            isHiRes = false;
+            isHiRes = false; // No need for rapid updates if not showing the time.
         } else {
-            final long elapsedMS = mIsHoldingForStart ? 0L : getElapsedTime();
-            final long hours = elapsedMS / (3_600_000L);
-            final long minutes = (elapsedMS % (3_600_000L)) / (60_000L);
-            final String timeFormat;
+            // The displayed time will include any time penalty. If holding before starting, then
+            // assume that the elapsed time will be started at zero, display that zero time and
+            // ignore any penalty applied to the time. If running, do not indicate the "+2" penalty
+            // has been applied (only because that is the way it has always been done).
+            final long time = mIsHoldingForStart ?           0L : getElapsedTime();
+            final Penalty penalty // May still end up as "DNF".
+                    = mIsHoldingForStart || (mIsRunning && mPenalty == Penalty.PLUS_TWO)
+                        ? Penalty.NONE
+                        : mPenalty;
 
-            isHiRes = (!mIsStarted || mShowHiRes) && hours == 0;
-
-            if (hours > 0) {
-                timeFormat = TIME_FMT_HOURS_LR; // Always low resolution when > 1 hour.
-            } else if (minutes > 0) {
-                timeFormat = isHiRes ? TIME_FMT_MINS_HR : TIME_FMT_MINS_LR;
-            } else {
-                timeFormat = isHiRes ? TIME_FMT_SECS_HR : TIME_FMT_SECS_LR;
-            }
-
-            timeText = new DateTime(elapsedMS, DateTimeZone.UTC).toString(timeFormat);
-
-            // If a "+2" penalty has been applied and the chronometer is not started or holding,
-            // append a small "+" to the time text to declare that a penalty has been added.
-            if (!mIsStarted && !mIsHoldingForStart && mPenalty == PuzzleUtils.PENALTY_PLUSTWO) {
-                timeText += " <small>+</small>";
-            }
+            // Time is always hi-res when the timer is stopped. Otherwise, if running, respect the
+            // preference for not showing 100ths of a second, if it is enabled.
+            isHiRes = !mIsRunning || TimeUtils.isChronoShowingHiRes(time, mShowHiRes, penalty);
+            timeText = TimeUtils.formatChronoTime(time, isHiRes, penalty); // Use hi-res override.
         }
 
-        setText(Html.fromHtml(timeText));
+        setText(timeText);
 
         return isHiRes;
     }
@@ -456,14 +480,14 @@ public class ChronometerMilli extends TextView {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        mIsVisible = false;
+        mIsVisibleOnScreen = false;
         updateRunning();
     }
 
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
-        mIsVisible = visibility == VISIBLE;
+        mIsVisibleOnScreen = visibility == VISIBLE;
         updateRunning();
     }
 
@@ -473,9 +497,9 @@ public class ChronometerMilli extends TextView {
      * will be updated regularly.
      */
     private void updateRunning() {
-        boolean running = mIsVisible && mIsStarted;
+        final boolean isUpdatingTimeOnScreen = mIsVisibleOnScreen && mIsRunning;
 
-        if (running != mIsRunning) {
+        if (isUpdatingTimeOnScreen != mIsUpdatingTimeOnScreen) {
             // State has changed:
             //
             //   If the chronometer was not running but has now started running, then kick off a
@@ -483,15 +507,16 @@ public class ChronometerMilli extends TextView {
             //   intervals. One message is queued here and then a new message is queued as each
             //   message is handled by "TimeUpdateHandler.handleMessage".
             //
-            //   If the chronometer was running but has now stopped running, clear "mIsRunning"
-            //   (which causes "TimeUpdateHandler.handleMessage" to break the chain of update
-            //   messages) and then clear any other unhandled "tick" messages from the queue.
+            //   If the chronometer was running but has now stopped running, clear
+            //   "mIsUpdatingTimeOnScreen" (which causes "TimeUpdateHandler.handleMessage" to break
+            //   the chain of update messages) and then clear any other unhandled "tick" messages
+            //   from the queue.
             //
             // If the state has not changed, then things can be left alone: either the message
             // chain is active and perpetuating itself, or it is inactive.
-            mIsRunning = running;
+            mIsUpdatingTimeOnScreen = isUpdatingTimeOnScreen;
 
-            if (mIsRunning) {
+            if (isUpdatingTimeOnScreen) {
                 // Use a very short "tick" time (1 ms) before the very first update.
                 mHandler.sendMessageDelayed(Message.obtain(mHandler, TICK_WHAT, this), 1L);
             } else {
@@ -515,8 +540,8 @@ public class ChronometerMilli extends TextView {
                 // of the seconds value, i.e., update faster if showing 100ths of a second.
                 final long tickTime = chronometer.updateText() ? TICK_TIME_HR : TICK_TIME_LR;
 
-                if (chronometer.mIsRunning) {
-                    // Only chain a new message for the next update if still running.
+                if (chronometer.mIsUpdatingTimeOnScreen) {
+                    // Only chain a new message for the next update if still running visibly.
                     sendMessageDelayed(Message.obtain(this, TICK_WHAT, chronometer), tickTime);
                 }
             }

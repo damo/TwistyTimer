@@ -1,10 +1,8 @@
 package com.aricneto.twistytimer.fragment.dialog;
 
-import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v7.widget.AppCompatSeekBar;
@@ -28,7 +26,7 @@ import com.aricneto.twistytimer.listener.DialogListener;
 import com.aricneto.twistytimer.utils.AlgUtils;
 import com.aricneto.twistytimer.utils.TTIntent;
 
-import java.util.HashMap;
+import java.util.Map;
 
 import butterknife.BindView;
 import butterknife.BindViews;
@@ -75,7 +73,8 @@ public class AlgDialog extends DialogFragment {
                             .title(R.string.edit_algorithm)
                             .input("", algorithm.getAlgs(), new MaterialDialog.InputCallback() {
                                 @Override
-                                public void onInput(MaterialDialog dialog, CharSequence input) {
+                                public void onInput(
+                                        @NonNull MaterialDialog dialog, CharSequence input) {
                                     algorithm.setAlgs(input.toString());
                                     dbHandler.updateAlgorithmAlg(mId, input.toString());
                                     algText.setText(input.toString());
@@ -97,8 +96,11 @@ public class AlgDialog extends DialogFragment {
                     break;
 
                 case R.id.progressButton:
-                    final AppCompatSeekBar seekBar = (AppCompatSeekBar) LayoutInflater.from(getContext()).inflate(R.layout.dialog_progress, null);
+                    final AppCompatSeekBar seekBar
+                            = (AppCompatSeekBar) LayoutInflater.from(getContext())
+                            .inflate(R.layout.dialog_progress, null);
                     seekBar.setProgress(algorithm.getProgress());
+
                     new MaterialDialog.Builder(getContext())
                             .title(R.string.dialog_set_progress)
                             .customView(seekBar, false)
@@ -106,7 +108,8 @@ public class AlgDialog extends DialogFragment {
                             .negativeText(R.string.action_cancel)
                             .onPositive(new MaterialDialog.SingleButtonCallback() {
                                 @Override
-                                public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                                public void onClick(
+                                        @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
                                     int seekProgress = seekBar.getProgress();
                                     algorithm.setProgress(seekProgress);
                                     dbHandler.updateAlgorithmProgress(mId, seekProgress);
@@ -125,8 +128,10 @@ public class AlgDialog extends DialogFragment {
                             .negativeText(R.string.action_cancel)
                             .onPositive(new MaterialDialog.SingleButtonCallback() {
                                 @Override
-                                public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                                    algorithm.setAlgs(AlgUtils.getDefaultAlgs(algorithm.getSubset(), algorithm.getName()));
+                                public void onClick(
+                                        @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                                    algorithm.setAlgs(AlgUtils.getDefaultAlgs(algorithm.getSubset(),
+                                            algorithm.getName()));
                                     dbHandler.updateAlgorithmAlg(mId, algorithm.getAlgs());
                                     algText.setText(algorithm.getAlgs());
                                 }
@@ -175,7 +180,6 @@ public class AlgDialog extends DialogFragment {
                 pllArrows.setImageDrawable(AlgUtils.getPllArrow(getContext(), algorithm.getName()));
                 pllArrows.setVisibility(View.VISIBLE);
             }
-
         }
 
         return dialogView;
@@ -200,8 +204,7 @@ public class AlgDialog extends DialogFragment {
 
     private void colorCube(final String state) {
         // See the reference image to understand how this works
-        final SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
-        final HashMap<Character, Integer> colorHash = AlgUtils.getColorLetterHashMap(sp);
+        final Map<Character, Integer> colorHash = AlgUtils.getColorLetterHashMap();
 
         ButterKnife.apply(stickers, new ButterKnife.Action<View>() {
             @Override

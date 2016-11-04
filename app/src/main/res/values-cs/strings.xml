@@ -176,11 +176,11 @@
     <string name="rate_dialog_positive">Ohodnotit</string>
     <string name="remove_session_confirmation_content">Tato akce se nedá vzít zpět.</string>
     <string name="remove_session_title">Odstranit všechny časy v tomto sezení?</string>
-    <string name="remove_subtype_confirmation">Odstranit kategorii?</string>
-    <string name="remove_subtype_confirmation_content">Jste si jisti, že chcete odstranit danou kategorii</string>
-    <string name="remove_subtype_confirmation_content_continuation">Také budou odstraněny všechny časy v této kategorii</string>
-    <string name="remove_subtype_title">Vyberte kategorii k odstranění</string>
-    <string name="rename_subtype_title">Vyberte kategorii k přejmenování</string>
+    <string name="remove_category_confirmation">Odstranit kategorii?</string>
+    <string name="remove_category_confirmation_content">Jste si jisti, že chcete odstranit danou kategorii</string>
+    <string name="remove_category_confirmation_content_continuation">Také budou odstraněny všechny časy v této kategorii</string>
+    <string name="remove_category_title">Vyberte kategorii k odstranění</string>
+    <string name="rename_category_title">Vyberte kategorii k přejmenování</string>
     <string name="reset_colorscheme">Resetovat barevné schémá na výchozí?</string>
     <string name="scrambleEnabledSummary">Generovat zamíchání pro hlavolamy</string>
     <string name="scrambleEnabledTitle">Generovat zamíchání</string>
@@ -220,7 +220,7 @@
     <string name="title_activity_about">O aplikaci a zpětná vazba</string>
     <string name="title_activity_settings">Nastavení</string>
     <string name="type">Kategorie</string>
-    <string name="w_new_subtype">Nová</string>
+    <string name="w_new_category">Nová</string>
     <string name="warning">Varování</string>
     <string name="worstSolveEnabledSummary">Upozornit když dosáhnete nového nejhoršího času</string>
     <string name="worstSolveEnabledTitle">Upozornění nejhoršího času</string>

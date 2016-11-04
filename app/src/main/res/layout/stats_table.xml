@@ -83,7 +83,7 @@
 
             <!-- NOTE: android:visibility="gone" causes a problem with vertical centering. -->
             <me.zhanghai.android.materialprogressbar.MaterialProgressBar
-                    android:id="@+id/progressSpinner"
+                    android:id="@+id/progress_spinner"
                     app:mpb_progressStyle="circular"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

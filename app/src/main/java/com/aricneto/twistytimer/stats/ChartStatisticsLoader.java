@@ -1,17 +1,16 @@
 package com.aricneto.twistytimer.stats;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.SystemClock;
+import android.support.annotation.NonNull;
 import android.support.v4.content.AsyncTaskLoader;
 import android.util.Log;
 
 import com.aricneto.twistytimer.TwistyTimer;
 import com.aricneto.twistytimer.items.Solve;
-import com.aricneto.twistytimer.utils.PuzzleUtils;
+import com.aricneto.twistytimer.utils.MainState;
 import com.aricneto.twistytimer.utils.TTIntent;
-import com.aricneto.twistytimer.utils.Wrapper;
 
 import static com.aricneto.twistytimer.utils.TTIntent.*;
 
@@ -21,19 +20,51 @@ import static com.aricneto.twistytimer.utils.TTIntent.*;
  * chart in the {@link com.aricneto.twistytimer.fragment.TimerGraphFragment}.
  * </p>
  * <p>
- * See the class description for {@link StatisticsLoader} for more details, as that loader behaves
- * in the same way as this loader.
+ * This is a <i>passive</i> loader. When first created, it registers a local broadcast listener and
+ * then waits until it receives a broadcast intent instructing it to load the solve time data to
+ * prepare the chart statistics. The loader will then begin to load the data on a background thread
+ * and will deliver the result to the component via the {@code onLoadFinished} call-back.
  * </p>
  * <p>
- * A different between this loader and the {@code StatisticsLoader}, is that this loader may return
- * a different object inside the {@code Wrapper}. When the selection changes to or from the history
- * of all solve times and the current session solve times, a full re-load is required and a new
- * {@code ChartStatistics} object will be created.
+ * This loader accepts the following broadcast intent actions where the intent category must be
+ * {@link TTIntent#CATEGORY_TIME_DATA_CHANGES}. All intents must carry an intent extra that
+ * identifies the current {@link MainState}.
+ * </p>
+ * <ul>
+ *     <li>{@link TTIntent#ACTION_BOOT_CHART_STATISTICS_LOADER}: Causes the loader to load the data
+ *         and prepare the chart statistics for the solve times selected by the main state, if it
+ *         is not already loaded. This is useful just after starting the loader, as no other
+ *         broadcast intent may be received until the user makes some change through the user
+ *         interface.</li>
+ *     <li>{@link TTIntent#ACTION_MAIN_STATE_CHANGED}: The same effect as booting the loader.
+ *         If the loader is already booted, and the main state of the loaded data does not match
+ *         that of the main state on this intent, then the data is re-loaded for the new main
+ *         state.</li>
+ *     <li>{@link TTIntent#ACTION_TIME_ADDED}: Must include an intent extra identifying the
+ *         {@link Solve} that was added (in addition to the main state extra). If the solve time
+ *         was added for the same main state as already loaded, the chart statistics will be
+ *         updated with the new time without requiring a new database read. If the time is added
+ *         manually and is not added as the latest time in the current session, the broadcast
+ *         action should be {@code ACTION_TIMES_MODIFIED} to cause a full re-load.</li>
+ *     <li>{@link TTIntent#ACTION_TIMES_MODIFIED}: Re-loads all of the data for the main state
+ *         identified in the intent, even if the main state has not changed.</li>
+ *     <li>{@link TTIntent#ACTION_TIMES_MOVED_TO_HISTORY}: Re-loads all of the data for the main
+ *         state identified in the intent, even if the main state has not changed. However, if
+ *         the chart statistics are loaded for the full history of all times and the main state
+ *         has not changed, then the data will not be re-loaded. The chart for the full history
+ *         of all times includes the times for the current session, so moving those times to the
+ *         history has no effect on the validity of the chart.</li>
+ * </ul>
+ * <p>
+ * The {@link TTIntent} class provides convenient methods for constructing and broadcasting some
+ * of these intents.
  * </p>
  *
  * @author damo
  */
-public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatistics>> {
+public class ChartStatisticsLoader extends AsyncTaskLoader<ChartStatistics> {
+    // NOTE: See the "IMPLEMENTATION NOTE" in "ScrambleLoader"; the same approach is used here.
+
     /**
      * Flag to enable debug logging from this class.
      */
@@ -57,32 +88,14 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
     private ChartStatistics mChartStats;
 
     /**
-     * A wrapper around the loaded chart statistics. This is required to allow the same
-     * {@code ChartStatistics} instance to be used for successive loads while ensuring that the
-     * {@code LoaderManager} sees a different object delivered, otherwise it would not invoke
-     * {@code onLoadFinished} on the activity or fragment waiting for the updated data.
-     */
-    private Wrapper<ChartStatistics> mLoadedData;
-
-    /**
-     * The puzzle type. This is fixed for the lifetime of the loader instance.
-     */
-    private final String mPuzzleType;
-
-    /**
-     * The puzzle subtype. This is fixed for the lifetime of the loader instance.
-     */
-    private final String mPuzzleSubtype;
-
-    /**
      * The broadcast receiver that is notified of changes to the solve time data.
      */
-    private BroadcastReceiver mTimeDataChangedReceiver;
+    private TTIntent.TTCategoryBroadcastReceiver mTimeDataChangedReceiver;
 
     /**
      * A broadcast receiver that is notified of changes to the solve time data.
      */
-    private static class TimeDataChangedReceiver extends BroadcastReceiver {
+    private static class TimeDataChangedReceiver extends TTIntent.TTCategoryBroadcastReceiver {
         /**
          * The loader to be notified of changes to the solve time data.
          */
@@ -95,6 +108,7 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
          * @param loader The loader to be notified of changes to the solve times.
          */
         TimeDataChangedReceiver(ChartStatisticsLoader loader) {
+            super(TTIntent.CATEGORY_TIME_DATA_CHANGES);
             mLoader = loader;
         }
 
@@ -107,26 +121,49 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
          */
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (DEBUG_ME) Log.d(TAG, "onReceive: " + intent); // Later log messages are indented.
+            if (DEBUG_ME) Log.d(TAG, "onReceive: " + intent);
 
-            // Calls to "mLoader.onContentChanged" will trigger a new call to "onStartLoading",
-            // which will result in a call to "deliverResult" (or to "forceLoad", then
-            // "loadInBackground", then "deliverResult") which will cause the "LoaderManager" to
-            // call "onLoadFinished" on the owning Fragment or Activity ... if the delivered result
-            // is not the same object as in the previous delivery (hence the Wrapper).
-            //
-            // NOTE: The default implementation of "onContentChanged" will only force a re-load if
-            // the loader is currently started (i.e., in use by a live fragment). If the loader is
-            // not started, a reload will not occur until the next time it is restarted (which
-            // might never happen). The test of "takeContentChanged()" in "onStartLoading" picks
-            // up on any such deferred reloading task.
+            // All of these intents need to hold the MainState extra, or they cannot be processed.
+            // The main state is not necessarily "new"; it can be the same as the last-notified
+            // state. This allows a complete change of the selected data without the need to
+            // re-create or restart the loader.
+            final MainState newMainState = TTIntent.getMainState(intent);
+
+            if (newMainState == null) {
+                throw new IllegalStateException("Intent must include state information: " + intent);
+            }
 
             switch (intent.getAction()) {
-                case ACTION_TIME_ADDED:
-                    if (!mLoader.deliverQuickResult(intent)) {
-                        // Could not deliver a quick update, so trigger a full re-load instead.
-                        if (DEBUG_ME) Log.d(TAG, "  Quick update not possible. Will reload!");
+                case ACTION_BOOT_CHART_STATISTICS_LOADER:
+                    // Shortly after starting, there may be no changes to the solve time data and
+                    // no changes to the main state, but something has to get the ball rolling.
+                    // This "bootstrap" intent can be ignored if data is already loaded for the
+                    // same main state. This is no different in its handling than a change to the
+                    // main state, but it is targeted specifically at this loader.
+                    if (mLoader.resetForNewMainState(newMainState)) {
+                        if (DEBUG_ME) Log.d(TAG, "  Boot request received. Initial load now!");
                         mLoader.onContentChanged();
+                    }
+                    break;
+
+                case ACTION_MAIN_STATE_CHANGED:
+                    // The main state was changed. Check if the change was relevant and ensure that
+                    // "mChartStats" is created and/or is configured correctly.
+                    if (mLoader.resetForNewMainState(newMainState)) {
+                        if (DEBUG_ME) Log.d(TAG, "  Main state changed. Will reload!");
+                        mLoader.onContentChanged();
+                    }
+                    break;
+
+                case ACTION_TIME_ADDED:
+                    // The "all times" chart includes times from the current session, so an update
+                    // is always required when a new time is added to the session.
+                    final Solve newSolve = TTIntent.getSolve(intent);
+
+                    if (newSolve != null) {
+                        mLoader.updateForNewSolve(newMainState, newSolve);
+                    } else {
+                        throw new IllegalStateException("Intent must include the Solve: " + intent);
                     }
                     break;
 
@@ -137,32 +174,25 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
                     // showing only the current session, then a full re-load is required. (There
                     // is no check if the current session is already empty, as that would just be
                     // an over-complication and the database re-load will be very quick, anyway.)
-                    if (mLoader.isForCurrentSessionOnly()) {
-                        // The chart is showing only session times and these have moved, so re-load.
+                    //
+                    // First, make sure the main state on the chart statistics is in sync with the
+                    // latest main state that arrived with the intent. Then check the history flag.
+                    if (mLoader.resetForNewMainState(newMainState)
+                            || !newMainState.isHistoryEnabled()) {
+                        // The chart was not in sync with the given main state, or no data had been
+                        // loaded before, or session times are being shown, so update everything.
                         if (DEBUG_ME) Log.d(TAG, "  Session moved to history. Will reload!");
                         mLoader.onContentChanged();
                     } // else the chart is already up to date.
                     break;
 
                 case ACTION_TIMES_MODIFIED:
-                    // If other unspecified modifications were made (e.g., deletions, changes to
-                    // penalties, etc.), a full re-load will be needed.
                     if (DEBUG_ME) Log.d(TAG, "  Unknown changes. Will reload!");
+                    // If other unspecified modifications were made (e.g., deletions, changes to
+                    // penalties, etc.), a full re-load will be needed. First ensure that
+                    // "mChartStats" is created and/or is configured correctly.
+                    mLoader.resetForNewMainState(newMainState);
                     mLoader.onContentChanged();
-                    break;
-
-                case ACTION_SESSION_TIMES_SHOWN:
-                    if (mLoader.resetForSelection(true)) {
-                        if (DEBUG_ME) Log.d(TAG, "  Changed to session times. Will reload!");
-                        mLoader.onContentChanged();
-                    } // else was already showing "current session" chart, so do nothing.
-                    break;
-
-                case ACTION_HISTORY_TIMES_SHOWN:
-                    if (mLoader.resetForSelection(false)) {
-                        if (DEBUG_ME) Log.d(TAG, "  Changed to history times. Will reload!");
-                        mLoader.onContentChanged();
-                    } // else was already showing "full history" chart, so do nothing.
                     break;
             }
         }
@@ -178,23 +208,11 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
      * @param chartStyle
      *     The {@link ChartStyle} defining the styles to be applied to the data sets in the loaded
      *     chart statistics. Must not be {@code null}.
-     * @param puzzleType
-     *     The name of the puzzle type for which statistics are required. See the {@code TYPE_*}
-     *     constants in {@link PuzzleUtils}.
-     * @param puzzleSubtype
-     *     The name of the puzzle subtype.
-     * @param isForCurrentSessionOnly
-     *     {@code true} if the chart statistics should be compiled initially only for the solve
-     *     times of the current session; or {@code false} if all times from all past and current
-     *     sessions should be used. The loader will listen to messages broadcasting changes to this
-     *     selection and will deliver updated statistics if any change is detected.
      */
-    public ChartStatisticsLoader(Context context, ChartStyle chartStyle,
-                                 String puzzleType, String puzzleSubtype,
-                                 boolean isForCurrentSessionOnly) {
+    public ChartStatisticsLoader(@NonNull Context context, @NonNull ChartStyle chartStyle) {
         super(context);
 
-        if (DEBUG_ME) Log.d(TAG, "Created new Loader for ChartStatistics!");
+        if (DEBUG_ME) Log.d(TAG, "new ChartStatistics()");
 
         // NOTE: "ChartStyle" must be initialised from an "Activity" context, as it needs to access
         // theme attributes. Therefore, it cannot be instantiated here, as the given context may be
@@ -204,104 +222,73 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
         // to the context, so no memory leaks should occur. However, holding a reference to an
         // Activity context from this Loader would be a really bad idea.
         mChartStyle = chartStyle;
-        mPuzzleType = puzzleType;
-        mPuzzleSubtype = puzzleSubtype;
-
-        resetForSelection(isForCurrentSessionOnly);
     }
 
     /**
-     * Resets the chart statistics if the "current session only" flag has changed. If the chart
-     * statistics have not been created before, they will be created now. If new chart statistics
-     * are created, the "wrapper" content will be set to {@code null} to indicate that the new
-     * chart statistics have not yet been loaded.
+     * Resets the chart statistics if they have been loaded, but are not compatible with the given
+     * main state. This will <i>not</i> trigger an automatic reload from the database; that is the
+     * responsibility of the caller.
      *
-     * @param isForCurrentSessionOnly
-     *     {@code true} if the chart statistics should be compiled initially only for the solve
-     *     times of the current session; or {@code false} if all times from all past and current
-     *     sessions should be used. The loader will listen to messages broadcasting changes to this
-     *     selection and will deliver updated statistics if any change is detected.
+     * @param newMainState
+     *     The new main state for which chart statistics are required.
      *
      * @return
-     *     {@code true} if the selection for the solve times was changed and new chart statistics
-     *     were created (and will need to be loaded from the database); or {@code false} if the
-     *     selection is the same as that already loaded (and the old chart statistics are still
-     *     valid).
+     *     {@code true} if the current chart statistics were not compatible with the given main
+     *     state (or if the statistics were {@code null}) and new statistics were created and need
+     *     to be populated from the database; or {@code false} if the current chart statistics were
+     *     already loaded and are compatible with the given main state.
      */
-    private boolean resetForSelection(boolean isForCurrentSessionOnly) {
-        if (mChartStats == null
-                || mChartStats.isForCurrentSessionOnly() != isForCurrentSessionOnly) {
-            if (DEBUG_ME) Log.d(TAG, "resetForSelection(): Creating new ChartStatistics");
-            // Unlike the "StatisticsLoader", the chart statistics cannot load statistics for all
-            // times and for the current session in the same instance.
-            mChartStats = isForCurrentSessionOnly
-                    ? ChartStatistics.newCurrentSessionChartStatistics(mChartStyle)
-                    : ChartStatistics.newAllTimeChartStatistics(mChartStyle);
-
-            // Wrapper remains empty until the first load is attempted. This allows a distinction
-            // to be made between "was not loaded" and "was loaded, but the database had no times".
-            mLoadedData = Wrapper.wrap(null);
-
+    private boolean resetForNewMainState(@NonNull MainState newMainState) {
+        // Compare puzzle type, solve category *AND* "isHistoryEnabled" flag.
+        if (mChartStats == null || !mChartStats.getMainState().equals(newMainState)) {
+            mChartStats = ChartStatistics.newChartStatistics(newMainState, mChartStyle);
             return true;
         }
 
-        // Selection did not change.
+        // "mChartStats" is not null and its main state matches the given state, so it is OK.
         return false;
-    }
-
-    /**
-     * Indicates if the currently-loaded chart statistics are for the current session only, or if
-     * they cover the full history of all times from all sessions.
-     *
-     * @return
-     *     {@code true} if the loaded chart statistics cover only the solve times for the current
-     *     session; or {@code false} if the full history of times is loaded. If no statistics have
-     *     been loaded, the result will be {@code true}.
-     */
-    private boolean isForCurrentSessionOnly() {
-        // NOTE: "true" if nothing is loaded, as it suits the case for ACTION_TIMES_MOVED_TO_HISTORY
-        // in the broadcast receiver. If "true", it will trigger a re-load, which makes sense.
-        return mLoadedData.isEmpty() || mChartStats.isForCurrentSessionOnly();
     }
 
     /**
      * Attempts a quick update of the chart statistics without resorting to a full read of the
-     * database. If the statistics were previously read from the database, then a single new time,
-     * added for the current session, can be added directly to the statistics and the update can be
-     * delivered to the activity or fragment.
+     * database. If the statistics were previously read from the database, then a single new solve
+     * time, added for the current session, can be added directly to the statistics and the update
+     * will be delivered to the activity or fragment. If the new solve cannot be updated, then a
+     * full reload will be performed.
      *
-     * @param intent
-     *     The intent that may contain details of a new solve time.
-     *
-     * @return
-     *     {@code true} if the statistics were up-to-date with respect to the database and the
-     *     intent contained a new solve time that was added to the statistics directly, avoiding
-     *     the need for a full database re-load; or {@code false} if a full database reload will
-     *     still be required to update the statistics.
+     * @param newSolve
+     *     The new solve to be added to the chart statistics.
      */
-    private boolean deliverQuickResult(Intent intent) {
-        if (!mLoadedData.isEmpty()) {
-            // All statistics were loaded previously from the database (because the wrapper is not
-            // empty), so try a quick update.
-            final Solve solve = TTIntent.getSolve(intent);
+    private void updateForNewSolve(@NonNull MainState newMainState, @NonNull Solve newSolve) {
+        if (resetForNewMainState(newMainState)) {
+            // "mChartStats" was not compatible with the new main state, so a full reload is
+            // needed. "newSolve" is ignored; that solve will be loaded from the database.
+            if (DEBUG_ME) Log.d(TAG, "  Quick update not possible. Will reload!");
+            onContentChanged();
+        } else {
+            // "mChartStats" is not null and is still compatible with the new main state. If the
+            // solve is also compatible, then add it to "mChartStats" and do a quick delivery.
+            if (newSolve.getPuzzleType() == newMainState.getPuzzleType()
+                && newSolve.getCategory().equals(newMainState.getSolveCategory())) {
 
-            if (solve != null) {
-                if (solve.getPenalty() == PuzzleUtils.PENALTY_DNF) {
-                    mChartStats.addDNF(solve.getDate());
+                if (newSolve.getPenalties().hasDNF()) {
+                    mChartStats.addDNF(newSolve.getDate());
                 } else {
-                    mChartStats.addTime(solve.getTime(), solve.getDate());
+                    mChartStats.addTime(newSolve.getExactTime(), newSolve.getDate());
                 }
 
-                mLoadedData = mLoadedData.rewrap(); // See explanation in "loadInBackground".
-
+                // Need deliver a different "ChartStatistics" instance from the last delivery,
+                // otherwise the "LoaderManager" treats it as already delivered and will not
+                // deliver it again. The copy-constructor will do a quick, cheap shallow copy.
+                // There is no need to update the field with the copy.
                 if (DEBUG_ME) Log.d(TAG, "  Delivering quick update to chart statistics!");
-                deliverResult(mLoadedData); // Will trigger "onLoadFinished" in Fragment/Activity.
-
-                return true;
+                deliverResult(new ChartStatistics(mChartStats)); // via "onLoadFinished()"
+            } else {
+                // This is weird. Log the problem and just do a reload.
+                Log.w(TAG, "Mismatch between main state and solve. BUG? Reloading all data....");
+                onContentChanged();
             }
         }
-
-        return false;
     }
 
     /**
@@ -312,46 +299,46 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
      */
     @Override
     protected void onStartLoading() {
-        if (DEBUG_ME) Log.d(TAG, "onStartLoading");
+        if (DEBUG_ME) Log.d(TAG, "onStartLoading()");
 
-        if (!mLoadedData.isEmpty()) {
-            // If statistics are available, deliver them now (even if they are not up-to-date).
-            if (DEBUG_ME) Log.d(TAG, "  Delivering available ChartStatistics...");
-            deliverResult(mLoadedData);
-        }
-
-        // If not already listening for changes to the time data, start listening now. If any
-        // pertinent change is detected (i.e., one that would impact on the validity of the
-        // statistics), the statistics will need to be updated or reloaded.
+        // If not already listening for changes to the time data, start listening now.
         if (mTimeDataChangedReceiver == null) {
-            if (DEBUG_ME) Log.d(TAG, "  Starting monitoring of changes affecting ChartStatistics.");
+            if (DEBUG_ME) Log.d(TAG, "  Monitoring changes affecting ChartStatistics.");
             mTimeDataChangedReceiver = new TimeDataChangedReceiver(this);
             // Register here and unregister in "onReset()".
-            TTIntent.registerReceiver(
-                    mTimeDataChangedReceiver, TTIntent.CATEGORY_TIME_DATA_CHANGES);
+            TTIntent.registerReceiver(mTimeDataChangedReceiver);
         }
 
-        // If any pertinent change was detected by the receiver, or if no statistics have been
-        // loaded, then perform a full load from the database now.
-        if (takeContentChanged() || mLoadedData.isEmpty()) {
-            if (DEBUG_ME) Log.d(TAG, "  forceLoad() called...");
-            forceLoad();
-            commitContentChanged();
+        // If a change has been notified, then load the statistics from the database. However, if
+        // no change has been notified, then the first call to "onStartLoading" will *not* cause
+        // a load to be forced. The loader will just sit passively and await the receipt of a
+        // broadcast intent.
+        if (takeContentChanged()) {
+            if (mChartStats != null) {
+                if (DEBUG_ME) Log.d(TAG, "  forceLoad() called to load chart statistics...");
+                forceLoad();
+            } else {
+                // This is not expected to happen!
+                Log.e(TAG, "Expected ChartStatistics to be prepared before loading!");
+                commitContentChanged(); // Swallow this change request.
+            }
         }
     }
 
+    /**
+     * Resets the loaded statistics and stops monitoring requests for updates or notifications of
+     * other changes.
+     */
     @Override
     protected void onReset() {
-        if (DEBUG_ME) Log.d(TAG, "onReset");
+        if (DEBUG_ME) Log.d(TAG, "onReset()");
 
         super.onReset();
 
-        // "Unload" any previously loaded statistics, so a full re-load will happen the next time.
-        mLoadedData = Wrapper.wrap(null); // "null" flags "not loaded" state.
-        mChartStats.reset();
+        mChartStats = null; // Forget everything.
 
         if (mTimeDataChangedReceiver != null) {
-            if (DEBUG_ME) Log.d(TAG, "  Stopping monitoring of changes affecting ChartStatistics.");
+            if (DEBUG_ME) Log.d(TAG, "  NOT monitoring changes affecting ChartStatistics.");
             // Receiver will be re-registered in "onStartLoading", if that is called again.
             TTIntent.unregisterReceiver(mTimeDataChangedReceiver);
             mTimeDataChangedReceiver = null;
@@ -364,28 +351,39 @@ public class ChartStatisticsLoader extends AsyncTaskLoader<Wrapper<ChartStatisti
      * @return The loaded chart statistics.
      */
     @Override
-    public Wrapper<ChartStatistics> loadInBackground() {
-        @SuppressWarnings("UnusedAssignment") // For when "DEBUG_ME" is false.
-        long startTime = 0L;
-        if (DEBUG_ME) { Log.d(TAG, "loadInBackground"); startTime = SystemClock.elapsedRealtime(); }
+    public ChartStatistics loadInBackground() {
+        if (DEBUG_ME) Log.d(TAG, "loadInBackground(): Loading all ChartStatistics....");
 
-        // This is a full, clean load, so clear out the results from the previous load.
-        mChartStats.reset();
+        // Take a copy of the field in case it is changed on another thread in mid load.
+        final ChartStatistics statsToLoad = mChartStats;
 
-        // TODO: Add support for cancellation: add a call-back to "populateChartStatistics", so
-        // it can poll the cancellation status as it iterates over the solves it reads from the
-        // database.
-        TwistyTimer.getDBHandler().populateChartStatistics(
-                mPuzzleType, mPuzzleSubtype, mChartStats);
+        if (statsToLoad != null) {
+            // Because "DEBUG_ME" is either always "true" or always "false"....
+            @SuppressWarnings({"UnusedAssignment", "ConstantConditions"})
+            final long startTime = DEBUG_ME ? SystemClock.elapsedRealtime() : 0L;
 
-        if (DEBUG_ME)
-            Log.d(TAG, String.format("  Loaded ChartStatistics in %,d ms.",
+            // This is a full, clean load, so clear out any results from the previous load.
+            // TODO: Add support for cancellation: add a call-back to "populateChartStatistics",
+            // so it can poll for cancellation while it iterates over the solve records.
+            statsToLoad.reset();
+            TwistyTimer.getDBHandler().populateChartStatistics(statsToLoad);
+
+            if (DEBUG_ME) Log.d(TAG, String.format("  Loaded ChartStatistics in %,d ms.",
                     SystemClock.elapsedRealtime() - startTime));
 
-        // If this is not the first time loading the data, a different object must be returned if
-        // the "LoaderManager" is to trigger "onLoadFinished" (go figure). As "mChartStats" is
-        // still the same object, a new wrapper around that object is created instead to trick
-        // "LoaderManager" into doing what is expected.
-        return mLoadedData = Wrapper.wrap(mChartStats); // Old content may have been null.
+            // If this is not the first time loading the data, a different object must be returned
+            // if the "LoaderManager" is to trigger "onLoadFinished" (go figure). As "mChartStats"
+            // is still the same object, create a new copy instead to trick "LoaderManager" into
+            // doing what is expected.
+            mChartStats = statsToLoad; // Re-sync, in case field changed on another thread.
+            return new ChartStatistics(statsToLoad); // No need to update field to the new instance.
+        }
+
+        // "mChartStats" is only set to "null" in "onReset()" and it is not expected that this
+        // "loadInBackground" method would then be called. Perhaps the was an initial load when
+        // the loader was started and before any request arrived. Very suspicious. Warn about it.
+        Log.w(TAG, "  Unable to load into null ChartStatistics!");
+
+        return null;
     }
 }

@@ -1,32 +1,38 @@
 <resources>
     <string name="app_name" translatable="false">Twisty Timer</string>
 
-    <string name="cube_222">2x2x2 Cube</string>
     <string name="cube_333">3x3x3 Cube</string>
+    <string name="cube_222">2x2x2 Cube</string>
     <string name="cube_444">4x4x4 Cube</string>
     <string name="cube_555">5x5x5 Cube</string>
-    <string name="cube_clock" translatable="false">Rubik\'s Clock</string>
-    <string name="cube_mega" translatable="false">Megaminx</string>
-    <string name="cube_pyra" translatable="false">Pyraminx</string>
-    <string name="cube_skewb" translatable="false">Skewb</string>
-    <string name="cube_sq1" translatable="false">Square-1</string>
+    <string name="cube_666">6x6x6 Cube</string>
+    <string name="cube_777">7x7x7 Cube</string>
 
+    <string name="cube_clock" translatable="false">Rubik\'s Clock</string>
+    <string name="cube_mega"  translatable="false">Megaminx</string>
+    <string name="cube_pyra"  translatable="false">Pyraminx</string>
+    <string name="cube_skewb" translatable="false">Skewb</string>
+    <string name="cube_sq1"   translatable="false">Square-1</string>
+
+    <!-- These shorter, "informal" names are used when sharing solve statistics. -->
+    <string name="cube_333_informal" translatable="false">3x3</string>
+    <string name="cube_222_informal" translatable="false">2x2</string>
+    <string name="cube_444_informal" translatable="false">4x4</string>
+    <string name="cube_555_informal" translatable="false">5x5</string>
+    <string name="cube_666_informal" translatable="false">6x6</string>
+    <string name="cube_777_informal" translatable="false">7x7</string>
 
     <string name="drawer_open">Menu opened</string>
     <string name="drawer_close">Menu closed</string>
     <string name="action_settings">Settings</string>
     <string name="drawer_about">About and feedback</string>
 
-
-    <string-array name="array_penalties" translatable="false">
-        <item>@string/no_penalty</item>
-        <item>+2</item>
-        <item>DNF</item>
-    </string-array>
-
     <string name="list_empty_state_message">Nothing here yet!\nTap the switch at the top of the screen to see your history.</string>
 
     <string name="no_penalty">No penalty</string>
+    <string name="plus_two_penalty" translatable="false">+2</string>
+    <string name="dnf_penalty"      translatable="false">DNF</string>
+
     <string name="generating_scramble">Generating scramble…</string>
     <string name="enter_type_name">Enter category name</string>
     <string name="select_solve_type">Select category</string>
@@ -41,18 +47,16 @@
     <string name="delete_dialog_confirmation_title">Remove solve?</string>
     <string name="delete_dialog_confirmation_button">Remove</string>
     <string name="delete_dialog_cancel_button">Cancel</string>
-    <string name="cube_666">6x6x6 Cube</string>
-    <string name="cube_777">7x7x7 Cube</string>
     <string name="select_penalty">Select penalty</string>
     <string name="inspection">Inspection</string>
     <string name="add_time">Add time</string>
     <string name="add_time_hint" translatable="false">1:23.45</string>
     <string name="action_add">Add</string>
     <string name="action_remove">Remove</string>
-    <string name="remove_subtype_title">Select category to remove</string>
-    <string name="remove_subtype_confirmation">Remove category?</string>
-    <string name="remove_subtype_confirmation_content">Are you sure you want to remove the solve category</string>
-    <string name="remove_subtype_confirmation_content_continuation">This will also remove all solves under that category</string>
+    <string name="remove_category_title">Select category to remove</string>
+    <string name="remove_category_confirmation">Remove category?</string>
+    <string name="remove_category_confirmation_content">Are you sure you want to remove the solve category</string>
+    <string name="remove_category_confirmation_content_continuation">This will also remove all solves under that category</string>
     <string name="edit_comment">Edit comment</string>
     <string name="action_done">Done</string>
     <string name="added_comment">Comment added</string>
@@ -79,10 +83,10 @@
     <string name="color_brown">Brown</string>
     <string name="color_blue">Blue</string>
     <string name="color_black">Black</string>
-    <string name="w_new_subtype">New</string>
+    <string name="w_new_category">New</string>
     <string name="action_rename">Rename</string>
     <string name="enter_new_name_dialog">Enter new name</string>
-    <string name="rename_subtype_title">Select a category to rename</string>
+    <string name="rename_category_title">Select a category to rename</string>
     <string name="backgroundEnabledSummary">Tint the timer background with the primary color</string>
     <string name="backgroundEnabledTitle">Colored background</string>
     <string name="holdEnabledSummary">Hold the timer for 0.5 seconds to start</string>
@@ -221,12 +225,6 @@
     <string name="fab_add_time">Add time</string>
     <string name="fab_share_error">Could not share. Make sure you\'ve done enough solves in this session.</string>
     <string name="fab_share_histogram_solvecount">%1$s time distribution (%2$d solves)</string>
-    <string name="cube_333_informal" translatable="false">3x3</string>
-    <string name="cube_222_informal" translatable="false">2x2</string>
-    <string name="cube_444_informal" translatable="false">4x4</string>
-    <string name="cube_555_informal" translatable="false">5x5</string>
-    <string name="cube_666_informal" translatable="false">6x6</string>
-    <string name="cube_777_informal" translatable="false">7x7</string>
     <string name="showcase_fab_average">You can now share your session averages!\nTap the button to get started</string>
     <string name="fab_share_title">Share session…</string>
     <string name="export_import_dialog_from_backup">From backup</string>

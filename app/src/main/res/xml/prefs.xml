@@ -6,13 +6,13 @@
         android:title="@string/prefTitleInspection">
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_inspectionEnabled"
+            android:defaultValue="@bool/default_inspection_enabled"
             android:key="@string/pk_inspection_enabled"
             android:title="@string/inspectionEnabledTitle" />
 
         <com.jenzz.materialpreference.Preference
-            android:defaultValue="@integer/default_inspectionTime"
-            android:key="@string/pk_inspection_time"
+            android:defaultValue="@integer/default_inspection_time_s"
+            android:key="@string/pk_inspection_time_s"
             android:summary="@string/inspectionTimeSummary"
             android:title="@string/inspectionTimeTitle" />
 
@@ -28,40 +28,40 @@
             android:persistent="false" />
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_holdEnabled"
+            android:defaultValue="@bool/default_hold_to_start_enabled"
             android:key="@string/pk_hold_to_start_enabled"
             android:summary="@string/holdEnabledSummary"
             android:title="@string/holdEnabledTitle" />
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_startCue"
+            android:defaultValue="@bool/default_start_cue_enabled"
             android:key="@string/pk_start_cue_enabled"
             android:summary="@string/startCueSummary"
             android:title="@string/startCueTitle" />
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_pagerEnabled"
+            android:defaultValue="@bool/default_tab_swiping_enabled"
             android:key="@string/pk_tab_swiping_enabled"
             android:summary="@string/pagerEnabledSummary"
             android:title="@string/pagerEnabledTitle" />
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_scrambleEnabled"
+            android:defaultValue="@bool/default_scramble_enabled"
             android:key="@string/pk_scramble_enabled"
             android:summary="@string/scrambleEnabledSummary"
             android:title="@string/scrambleEnabledTitle" />
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_showHints"
-            android:key="@string/pk_show_scramble_hints"
+            android:defaultValue="@bool/default_show_cross_hints"
+            android:key="@string/pk_show_cross_hints"
             android:dependency="@string/pk_scramble_enabled"
             android:summary="@string/showHintsSummary"
             android:title="@string/showHintsTitle" />
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_showHintsXCross"
-            android:key="@string/pk_show_scramble_x_cross_hints"
-            android:dependency="@string/pk_show_scramble_hints"
+            android:defaultValue="@bool/default_show_x_cross_hints"
+            android:key="@string/pk_show_x_cross_hints"
+            android:dependency="@string/pk_show_cross_hints"
             android:title="@string/showHintsXCrossTitle" />
 
     </com.jenzz.materialpreference.PreferenceCategory>
@@ -70,7 +70,7 @@
         android:title="@string/listPrefTitle">
 
         <com.jenzz.materialpreference.SwitchPreference
-            android:defaultValue="@bool/default_clearEnabled"
+            android:defaultValue="@bool/default_show_clear_button"
             android:key="@string/pk_show_clear_button"
             android:summary="@string/clearEnabledSummary"
             android:title="@string/clearEnabledTitle" />

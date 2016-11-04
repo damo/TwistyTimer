@@ -1,16 +1,30 @@
 package com.aricneto.twistytimer.stats;
 
-import com.aricneto.twistytimer.utils.PuzzleUtils;
+import android.support.annotation.VisibleForTesting;
+
+import com.aricneto.twistytimer.utils.WCAMath;
 
 import java.util.Arrays;
 
+import static com.aricneto.twistytimer.stats.Statistics.TIME_DNF;
+import static com.aricneto.twistytimer.stats.Statistics.TIME_UNKNOWN;
+
 /**
+ * <p>
  * Calculates the average time of a number of puzzle solves. Running averages are easily calculated
  * as each new solve is added. If the number of solve times is five or greater, the best and worst
  * times are discarded before returning the truncated arithmetic mean (aka "trimmed mean" or
  * "modified mean) of the remaining times. All times and averages are in milliseconds. The mean,
  * minimum (best) and maximum (worst) of all added times, and the best average from all values of
  * the running average are also made available.
+ * </p>
+ * <p>
+ * As solve times (WCA "results") are added to this calculator, they are rounded/truncated according
+ * to WCA Regulations 9f1 and 9f2. These rounded "results" are used as the input values when
+ * calculating average-of-N times (WCA "averages" and "means"). The "averages" and "means" are then
+ * rounded per regulations before they are returned. All other result times, such as the best and
+ * worst results, are also returned rounded in accordance with the WCA Regulations.
+ * </p>
  *
  * @author damo
  */
@@ -38,24 +52,6 @@ public final class AverageCalculator {
     // should be good enough and not use memory excessively.
 
     /**
-     * A special time value that represents a solve that "did-not-finish" (DNF). This is also used
-     * to represent the calculated value of an average where too many solves included in the
-     * average were DNF solves.
-     */
-    // Deliberately avoiding using "PuzzleUtils.TIME_DNF" as the canonical flag value, as there is
-    // no guarantee that it will remain with its current value of "-1" and this class needs to be
-    // sure that the value will be negative and will not clash with "UNKNOWN". If changing these,
-    // use values that can also be represented as in "int".
-    public static final long DNF = -665L;
-
-    /**
-     * A value that indicates that a calculated time is unknown. This is usually the case when not
-     * enough times have been recorded to satisfy the required number of solves to be included in
-     * the calculation of the average, or when all recorded solves are {@link #DNF}s.
-     */
-    public static final long UNKNOWN = -666L;
-
-    /**
      * The minimum number of times to include in the average before a single DNF will not result
      * in disqualification.
      */
@@ -67,15 +63,16 @@ public final class AverageCalculator {
     private final int mN;
 
     /**
-     * Indicates if averages should be reported as {@link #DNF}s if too many solve times are DNFs.
-     * The number of DNFs that constitute "too many" varies with the value of {@link #mN}.
+     * Indicates if averages times should be reported as {@link Statistics#TIME_DNF} if too many
+     * solve times are DNFs. The number of DNFs that constitute "too many" varies with the value
+     * of {@link #mN}.
      */
     private final boolean mDisqualifyDNFs;
 
     /**
      * The array holding the most recently added solve times. A solve time can also be recorded as
-     * a {@link #DNF}. This is managed as a circular queue. Once full, the oldest added time is
-     * overwritten when the next new time is added.
+     * a {@link Statistics#TIME_DNF}. This is managed as a circular queue. Once full, the oldest
+     * added time is overwritten when the next new time is added.
      */
     private final long[] mTimes;
 
@@ -104,57 +101,58 @@ public final class AverageCalculator {
     /**
      * The sum of all non-DNF results currently recorded in {@code #mTimes}. The number of such
      * results is given by {@code Math.min(mN, mNumSolves) - mNumCurrentDNFs}. A value of
-     * {@link #UNKNOWN} indicates that there are no non-DNF results recorded.
+     * {@link Statistics#TIME_UNKNOWN} indicates that there are no non-DNF results recorded.
      */
     private long mCurrentSum;
 
     /**
      * The sum of all non-DNF results ever recorded in {@code #mTimes}. The number of such results
-     * is given by {@code mNumSolves - mNumAllTimeDNFs}. A value of {@link #UNKNOWN} indicates
+     * is given by {@code mNumSolves - mNumAllTimeDNFs}. {@link Statistics#TIME_UNKNOWN} indicates
      * that there are no non-DNF results recorded.
      */
     private long mAllTimeSum;
 
     /**
-     * The best time currently recorded in {@code #mTimes}. A value of {@link #UNKNOWN} indicates
-     * that there is no non-DNF result recorded.
+     * The best time currently recorded in {@code #mTimes}. {@link Statistics#TIME_UNKNOWN}
+     * indicates that there is no non-DNF result recorded.
      */
     private long mCurrentBestTime;
 
     /**
      * The worst time (not a DNF) currently recorded in {@code #mTimes}. If any DNF is present, a
      * DNF will be taken instead as the worst time, if the calculation needs to exclude one. A
-     * value of {@link #UNKNOWN} indicates that there is no non-DNF result recorded.
+     * value of {@link Statistics#TIME_UNKNOWN} indicates that there is no non-DNF result recorded.
      */
     private long mCurrentWorstTime;
 
     /**
      * The current average value calculated from all times stored in {@link #mTimes}. A value of
-     * {@link #UNKNOWN} indicates insufficient results have been added to calculate the required
-     * average, or that the calculation has not been performed. A value of {@link #DNF} indicates
-     * that too many DNF results are present and the average is disqualified.
+     * {@link Statistics#TIME_UNKNOWN} indicates insufficient results have been added to calculate
+     * the required average, or that the calculation has not been performed. A value of
+     * {@link Statistics#TIME_DNF} indicates that too many DNF results are present and the average
+     * is disqualified.
      */
     private long mCurrentAverage;
 
     /**
      * The best time ever added to this calculator. This time may not currently be recorded in
-     * {@code #mTimes}, as it may have been overwritten. A value of {@link #UNKNOWN} indicates that
-     * there is no non-DNF result recorded.
+     * {@code #mTimes}, as it may have been overwritten. A value of {@link Statistics#TIME_UNKNOWN}
+     * indicates that there is no non-DNF result recorded.
      */
     private long mAllTimeBestTime;
 
     /**
-     * The worst time (not a DNF) ever added to this calculator. This time may not currently be
-     * recorded in {@code #mTimes}, as it may have been overwritten. A value of {@link #UNKNOWN}
-     * indicates that there is no non-DNF result recorded.
+     * The worst time (not a DNF) ever added to this calculator. This time may not currently
+     * be recorded in {@code #mTimes}, as it may have been overwritten. A value of
+     * {@link Statistics#TIME_UNKNOWN} indicates that there is no non-DNF result recorded.
      */
     private long mAllTimeWorstTime;
 
     /**
-     * The best average value calculated from all times added to date. A value of {@link #UNKNOWN}
-     * indicates that insufficient results have been added to calculate the required average. A
-     * value of {@link #DNF} indicates that averages could be calculated, but that every average
-     * was disqualified as a DNF average.
+     * The best average value calculated from all times added to date. A value of
+     * {@link Statistics#TIME_UNKNOWN} indicates that insufficient results have been added to
+     * calculate the required average. A value of {@link Statistics#TIME_DNF} indicates that
+     * averages could be calculated, but that every average was disqualified as a DNF average.
      */
     private long mAllTimeBestAverage;
 
@@ -165,14 +163,14 @@ public final class AverageCalculator {
      *     The number of solve times that will be averaged (e.g., 3, 5, 12, ...). Must be greater
      *     than zero.
      * @param disqualifyDNFs
-     *     {@code true} if an average should be disqualified if too many {@link #DNF}s are present,
+     *     {@code true} if an average should be disqualified if too many DNFs are present;
      *     or {@code false} if DNFs should be ignored. See {@link #getCurrentAverage()} for more
      *     details on the calculation.
      *
      * @throws IllegalArgumentException
      *     If {@code n} is not greater than zero.
      */
-    public AverageCalculator(int n, boolean disqualifyDNFs) {
+    AverageCalculator(int n, boolean disqualifyDNFs) {
         if (n <= 0) {
             throw new IllegalArgumentException("Number of solves must be > 0: " + n);
         }
@@ -192,19 +190,19 @@ public final class AverageCalculator {
      */
     public void reset() {
         Arrays.fill(mTimes, 0L);
-        mNext = 0;
-        mNumSolves = 0;
+        mNext           = 0;
+        mNumSolves      = 0;
         mNumCurrentDNFs = 0;
         mNumAllTimeDNFs = 0;
 
-        mCurrentSum = UNKNOWN;
-        mAllTimeSum = UNKNOWN;
-        mCurrentBestTime = UNKNOWN;
-        mCurrentWorstTime = UNKNOWN;
-        mCurrentAverage = UNKNOWN;
-        mAllTimeBestTime = UNKNOWN;
-        mAllTimeWorstTime = UNKNOWN;
-        mAllTimeBestAverage = UNKNOWN;
+        mCurrentSum         = TIME_UNKNOWN;
+        mAllTimeSum         = TIME_UNKNOWN;
+        mCurrentBestTime    = TIME_UNKNOWN;
+        mCurrentWorstTime   = TIME_UNKNOWN;
+        mCurrentAverage     = TIME_UNKNOWN;
+        mAllTimeBestTime    = TIME_UNKNOWN;
+        mAllTimeWorstTime   = TIME_UNKNOWN;
+        mAllTimeBestAverage = TIME_UNKNOWN;
     }
 
     /**
@@ -223,19 +221,33 @@ public final class AverageCalculator {
 
     /**
      * Adds a solve time to be included in the calculation of the average. Solve times should be
-     * added in chronological order (i.e., by solve time-stamp, not solve time).
+     * added in chronological order (i.e., by solve time-stamp, not solve time). Solve times are
+     * rounded/truncated per the WCA Regulations (9f1 and 9f2) for "result" times as they are added
+     * by this method. These rounded/truncated "result" times are used as the inputs to the
+     * calculation of average/mean times. The average/mean times are rounded per regulations when
+     * they are calculated.
      *
      * @param time
-     *     The solve time in milliseconds. The time must be greater than zero. Use {@link #DNF} to
-     *     represent a DNF solve.
+     *     The solve time in milliseconds. The time must be greater than zero. Use
+     *     {@link Statistics#TIME_DNF} to represent a DNF solve.
      *
      * @throws IllegalArgumentException
-     *     If the added time is not greater than zero and is not {@code DNF}.
+     *     If the added time is not greater than zero and is not {@code TIME_DNF}.
      */
-    public void addTime(long time) throws IllegalArgumentException {
-        if (time <= 0L && time != DNF) {
-            throw new IllegalArgumentException("Time must be > 0 or be 'DNF': " + time);
+    void addTime(long time) throws IllegalArgumentException {
+        // NOTE: Using a special time value to represent a DNF means that the average calculator
+        // cannot calculate the cumulative elapsed solve time. DNF solves can be declared at the
+        // end of the solve, in which case, the elapsed time may still be counted if there is a
+        // cumulative time limit. Any requirement to support a total elapsed time including the
+        // elapsed times of DNFs should be met elsewhere (e.g., in the "Statistics" class), as it
+        // would over-complicate this "AverageCalculator" class, adding many more combinations to
+        // be tested, for example.
+
+        if (time <= 0L && time != TIME_DNF) {
+            throw new IllegalArgumentException("Time must be > 0 or be 'TIME_DNF': " + time);
         }
+
+        final long wcaTime = time != TIME_DNF ? WCAMath.roundResult(time) : TIME_DNF;
 
         mNumSolves++;
 
@@ -252,18 +264,18 @@ public final class AverageCalculator {
             ejectedTime = mTimes[mNext]; // May be DNF.
         } else {
             // "mNext" must be less than "mN" if "mNumSolves" is less than "mN".
-            ejectedTime = UNKNOWN; // Nothing ejected.
+            ejectedTime = TIME_UNKNOWN; // Nothing ejected.
         }
 
-        mTimes[mNext] = time;
+        mTimes[mNext] = wcaTime;
         mNext++;
 
         // Order is important here, as these methods change fields and some methods depend on the
         // fields being updated by other methods before they are called. All depend on the new
         // time being stored already (see above) and any ejected time being known (also above).
-        updateDNFCounts(time, ejectedTime);
-        updateCurrentBestAndWorstTimes(time, ejectedTime);
-        updateSums(time, ejectedTime);
+        updateDNFCounts(wcaTime, ejectedTime);
+        updateCurrentBestAndWorstTimes(wcaTime, ejectedTime);
+        updateSums(wcaTime, ejectedTime);
         updateCurrentAverage();
 
         updateAllTimeBestAndWorstTimes();
@@ -273,24 +285,27 @@ public final class AverageCalculator {
     /**
      * Adds solve times to be included in the calculation of the average. Solve times should be
      * added in chronological order (i.e., by solve time-stamp, not solve time). This method can be
-     * called repeatedly to add any number of solve times over any number of calls.
+     * called repeatedly to add any number of solve times over any number of calls. Times will be
+     * rounded in accordance with WCA Regulations for "results" as they are added. For more details
+     * on the rounding applied to the times, see {@link #addTime(long)}.
      *
      * @param times
      *     Zero or more solve times in milliseconds. Times must be greater than zero. Use
-     *     {@link #DNF} to represent each DNF. If this is {@code null} or empty, it will be ignored
-     *     and this method will have no effect.
+     *     {@link Statistics#TIME_DNF} to represent each DNF. If {@code times} is {@code null} or
+     *     empty, it will be ignored and this method will have no effect.
      *
      * @throws IllegalArgumentException
-     *     If any added time is not greater than zero and is not {@code DNF}.
+     *     If any added time is not greater than zero and is not {@code TIME_DNF}.
      */
-    public void addTimes(long... times) throws IllegalArgumentException {
+    @VisibleForTesting // Well, really only ever *used* for testing.
+    void addTimes(long... times) throws IllegalArgumentException {
         // The variable arguments list makes it easier to write compact test cases; it does not
         // really make life any easier when adding times via a database cursor. In non-test
         // contexts, it will be more efficient to call "addTime", as each call will not need to
         // create a "long[]" object.
         if (times != null) {
             for (final long time : times) {
-                addTime(time); // May throw IAE.
+                addTime(time); // May throw IAE. Will perform the necessary rounding.
             }
         }
     }
@@ -299,18 +314,18 @@ public final class AverageCalculator {
      * Updates the current and all-time counts of DNF solves.
      *
      * @param addedTime
-     *     The newly added time. May be {@link #DNF}.
+     *     The newly added time. May be {@link Statistics#TIME_DNF}.
      * @param ejectedTime
-     *     An old time that was ejected to make room for the newly added time. May be {@code DNF}.
-     *     Use {@link #UNKNOWN} if no old time was ejected.
+     *     An old time that was ejected to make room for the newly added time. May be
+     *     {@code TIME_DNF}. Use {@link Statistics#TIME_UNKNOWN} if no old time was ejected.
      */
     private void updateDNFCounts(long addedTime, long ejectedTime) {
-        if (addedTime == DNF) {
+        if (addedTime == TIME_DNF) {
             mNumCurrentDNFs++;
             mNumAllTimeDNFs++;
         }
 
-        if (ejectedTime == DNF) {
+        if (ejectedTime == TIME_DNF) {
             mNumCurrentDNFs--;
         }
     }
@@ -320,49 +335,49 @@ public final class AverageCalculator {
      * be updated by {@link #updateDNFCounts(long, long)} before calling this method.
      *
      * @param addedTime
-     *     The newly added time. May be {@link #DNF}. Must already be stored.
+     *     The newly added time. May be {@link Statistics#TIME_DNF}. Must already be stored.
      * @param ejectedTime
-     *     An old time that was ejected to make room for the newly added time. May be {@code DNF}.
-     *     Use {@link #UNKNOWN} if no old time was ejected.
+     *     An old time that was ejected to make room for the newly added time. May be
+     *     {@code TIME_DNF}. Use {@link Statistics#TIME_UNKNOWN} if no old time was ejected.
      */
     private void updateCurrentBestAndWorstTimes(long addedTime, long ejectedTime) {
         // The logic here will set one or both of "mCurrentBestTime" and "mCurrentWorstTime" to
-        // "UNKNOWN" if knowledge of the best or worst time has been lost. If either value becomes
-        // "UNKNOWN", a new iteration over "mTimes" will recalculate both values.
+        // "TIME_UNKNOWN" if knowledge of the best or worst time has been lost. If either value
+        // becomes "TIME_UNKNOWN", a new iteration over "mTimes" will recalculate both values.
 
-        if (addedTime == DNF) {
+        if (addedTime == TIME_DNF) {
             // Newly added time does not change the current best or worst time, but has either of
             // the best or worst times (not a DNF) just been ejected and is recalculation required?
             if (ejectedTime == mCurrentBestTime || ejectedTime == mCurrentWorstTime) {
                 // It does not matter which has been ejected, just recalculate both.
-                mCurrentBestTime = UNKNOWN;
-                mCurrentWorstTime = UNKNOWN;
+                mCurrentBestTime = TIME_UNKNOWN;
+                mCurrentWorstTime = TIME_UNKNOWN;
             }
         } else {
             // Newly added time is not a DNF and may be the new best or worst time (or both).
             // However, if it is not the new (or equal) best or worst time, then check if we are
             // ejecting the old best or worst time. If either is ejected, there may be another best
             // or worst time in "mTimes" (with respect to "addedTime") and it must be found. There
-            // if no need to check if "ejectedTime" is DNF or UNKNOWN.
-            if (mCurrentBestTime == UNKNOWN || addedTime <= mCurrentBestTime) {
+            // if no need to check if "ejectedTime" is TIME_DNF or TIME_UNKNOWN.
+            if (mCurrentBestTime == TIME_UNKNOWN || addedTime <= mCurrentBestTime) {
                 mCurrentBestTime = addedTime;
             } else if (ejectedTime == mCurrentBestTime) {
-                mCurrentBestTime = UNKNOWN;
+                mCurrentBestTime = TIME_UNKNOWN;
             }
 
-            if (mCurrentWorstTime == UNKNOWN || addedTime >= mCurrentWorstTime) {
+            if (mCurrentWorstTime == TIME_UNKNOWN || addedTime >= mCurrentWorstTime) {
                 mCurrentWorstTime = addedTime;
             } else if (ejectedTime == mCurrentWorstTime) {
-                mCurrentWorstTime = UNKNOWN;
+                mCurrentWorstTime = TIME_UNKNOWN;
             }
         }
 
         // Recalculate the best and worst times. We can skip this if every stored time is a DNF.
-        // In that case, both "mCurrentBestTime" and "mCurrentWorstTime" will remain UNKNOWN.
+        // In that case, both "mCurrentBestTime" and "mCurrentWorstTime" will remain TIME_UNKNOWN.
         final int numCurrentSolves = Math.min(mNumSolves, mN);
 
         if (mNumCurrentDNFs != numCurrentSolves
-                && (mCurrentBestTime == UNKNOWN || mCurrentWorstTime == UNKNOWN)) {
+                && (mCurrentBestTime == TIME_UNKNOWN || mCurrentWorstTime == TIME_UNKNOWN)) {
             // At least one stored time is not a DNF and is > 0, so reset the fields and rescan.
             mCurrentBestTime = Long.MAX_VALUE;
             mCurrentWorstTime = 0L;
@@ -372,7 +387,7 @@ public final class AverageCalculator {
             for (int i = 0; i < numCurrentSolves; i++) {
                 final long time = mTimes[i];
 
-                if (time != DNF) {
+                if (time != TIME_DNF) {
                     mCurrentBestTime = Math.min(mCurrentBestTime, time);
                     mCurrentWorstTime = Math.max(mCurrentWorstTime, time);
                 }
@@ -382,28 +397,28 @@ public final class AverageCalculator {
 
     /**
      * Updates the sum of all times currently stored and the sum of all times ever added. Any
-     * {@link #DNF} results are ignored. If all recorded times have been DNFs, the sums will set
-     * to {@link #UNKNOWN}.
+     * {@link Statistics#TIME_DNF} results are ignored. If all recorded times have been DNFs,
+     * the sums will set to {@link Statistics#TIME_UNKNOWN}.
      *
      * @param addedTime
-     *     The newly added time. May be {@code DNF}. Must already be stored.
+     *     The newly added time. May be {@code TIME_DNF}. Must already be stored.
      * @param ejectedTime
-     *     An old time that was ejected to make room for the newly added time. May be {@code DNF}.
-     *     Use {@code UNKNOWN} if no old time was ejected.
+     *     An old time that was ejected to make room for the newly added time. May be
+     *     {@code TIME_DNF}. Use {@code TIME_UNKNOWN} if no old time was ejected.
      */
     private void updateSums(long addedTime, long ejectedTime) {
-        if (addedTime != DNF) {
-            mCurrentSum = addedTime + (mCurrentSum == UNKNOWN ? 0L : mCurrentSum);
-            mAllTimeSum = addedTime + (mAllTimeSum == UNKNOWN ? 0L : mAllTimeSum);
+        if (addedTime != TIME_DNF) {
+            mCurrentSum = addedTime + (mCurrentSum == TIME_UNKNOWN ? 0L : mCurrentSum);
+            mAllTimeSum = addedTime + (mAllTimeSum == TIME_UNKNOWN ? 0L : mAllTimeSum);
         }
-        if (ejectedTime != DNF && ejectedTime != UNKNOWN) {
+        if (ejectedTime != TIME_DNF && ejectedTime != TIME_UNKNOWN) {
             mCurrentSum -= ejectedTime;
         }
 
         // Returned from a state with at least one non-DNF time to a state where all times are DNFs.
         // Flag the new state properly. ("mAllTimeSum" cannot return to zero.)
         if (mCurrentSum == 0L) {
-            mCurrentSum = UNKNOWN;
+            mCurrentSum = TIME_UNKNOWN;
         }
     }
 
@@ -416,10 +431,10 @@ public final class AverageCalculator {
     private void updateCurrentAverage() {
         if (mNumSolves < mN) {
             // Not enough times added to calculate the average.
-            mCurrentAverage = UNKNOWN;
+            mCurrentAverage = TIME_UNKNOWN;
         } else if (mNumCurrentDNFs == mN) {
             // Enough times have been added, but all of the currently stored ones are DNFs.
-            mCurrentAverage = DNF;
+            mCurrentAverage = TIME_DNF;
         } else if (!mDisqualifyDNFs && mNumCurrentDNFs == mN - 1) {
             // More than one DNF is not an automatic disqualification, but there is only one
             // non-DNF time present. Just use that time as the average.
@@ -427,7 +442,7 @@ public final class AverageCalculator {
         } else if (mN >= MIN_N_TO_ALLOW_ONE_DNF) {
             if (mDisqualifyDNFs && mNumCurrentDNFs > 1) {
                 // Disqualify the average: there is more than one DNF and only one DNF is allowed.
-                mCurrentAverage = DNF;
+                mCurrentAverage = TIME_DNF;
             } else {
                 // There is no more than one DNF, or there is more than one DNF, but that will not
                 // cause automatic disqualification. There are at least two non-DNF times present.
@@ -436,21 +451,21 @@ public final class AverageCalculator {
                 // DNFs are present, so at least one non-DNF time will remain after discarding the
                 // outliers. Discard all other DNFs, if any. One DNF may already have been
                 // discarded as the worst time; do not discard it twice.
-                mCurrentAverage
-                        = (mCurrentSum - mCurrentBestTime
-                               - (mNumCurrentDNFs == 0 ? mCurrentWorstTime : 0))
-                          / (mN - 2 - (mNumCurrentDNFs > 1 ? mNumCurrentDNFs - 1 : 0));
+                mCurrentAverage = WCAMath.roundAverage(
+                        (mCurrentSum - mCurrentBestTime
+                                - (mNumCurrentDNFs == 0 ? mCurrentWorstTime : 0))
+                        / (mN - 2 - (mNumCurrentDNFs > 1 ? mNumCurrentDNFs - 1 : 0)));
             }
         } else { // mN < MIN_N_TO_ALLOW_ONE_DNF
             // NOTE: "mN" could be as low as 1, but will not be zero (see the constructor).
             if (mDisqualifyDNFs && mNumCurrentDNFs > 0) {
                 // Disqualify the average as *no* DNF (not even one) is allowed for small "n".
-                mCurrentAverage = DNF;
+                mCurrentAverage = TIME_DNF;
             } else {
                 // There is no DNF, or there are DNFs, but that will not cause automatic
                 // disqualification. There is at least one non-DNF time present. Calculate the
                 // (not truncated) arithmetic mean.
-                mCurrentAverage = mCurrentSum / (mN - mNumCurrentDNFs);
+                mCurrentAverage = WCAMath.roundAverage(mCurrentSum / (mN - mNumCurrentDNFs));
             }
         }
     }
@@ -461,16 +476,16 @@ public final class AverageCalculator {
      * calling this method.
      */
     private void updateAllTimeBestAndWorstTimes() {
-        if (mAllTimeBestTime == UNKNOWN) {
-            mAllTimeBestTime = mCurrentBestTime; // May still be UNKNOWN.
-        } else if (mCurrentBestTime != UNKNOWN) {
+        if (mAllTimeBestTime == TIME_UNKNOWN) {
+            mAllTimeBestTime = mCurrentBestTime; // May still be TIME_UNKNOWN.
+        } else if (mCurrentBestTime != TIME_UNKNOWN) {
             // "mCurrentBestTime" is never set to "DNF".
             mAllTimeBestTime = Math.min(mAllTimeBestTime, mCurrentBestTime);
         }
 
-        if (mAllTimeWorstTime == UNKNOWN) {
-            mAllTimeWorstTime = mCurrentWorstTime; // May still be UNKNOWN.
-        } else if (mCurrentWorstTime != UNKNOWN) {
+        if (mAllTimeWorstTime == TIME_UNKNOWN) {
+            mAllTimeWorstTime = mCurrentWorstTime; // May still be TIME_UNKNOWN.
+        } else if (mCurrentWorstTime != TIME_UNKNOWN) {
             mAllTimeWorstTime = Math.max(mAllTimeWorstTime, mCurrentWorstTime);
         }
     }
@@ -480,12 +495,13 @@ public final class AverageCalculator {
      * updated by {@link #updateCurrentAverage()} before calling this method.
      */
     private void updateAllTimeBestAverage() {
-        if (mAllTimeBestAverage == UNKNOWN || mAllTimeBestAverage == DNF) {
-            // "mCurrentAverage" may still be UNKNOWN or DNF, but cannot change back to UNKNOWN once
-            // set to a different value, as UNKNOWN is cleared once "mN" solves have been added.
-            // Therefore, we never set "mAllTimeBestAverage" to a value worse than it already has.
+        if (mAllTimeBestAverage == TIME_UNKNOWN || mAllTimeBestAverage == TIME_DNF) {
+            // "mCurrentAverage" may still be TIME_UNKNOWN or TIME_DNF, but cannot change back to
+            // TIME_UNKNOWN once set to a different value, as TIME_UNKNOWN is cleared once "mN"
+            // solves have been added. Therefore, we never set "mAllTimeBestAverage" to a value
+            // worse than it already has.
             mAllTimeBestAverage = mCurrentAverage;
-        } else if (mCurrentAverage != DNF) {
+        } else if (mCurrentAverage != TIME_DNF) {
             mAllTimeBestAverage = Math.min(mAllTimeBestAverage, mCurrentAverage);
         }
     }
@@ -497,12 +513,12 @@ public final class AverageCalculator {
      * </p>
      * <p>
      * Where the value of "n" is less than 5, the average is the arithmetic mean of the currently
-     * stored values, not a truncated mean. If any currently recorded solve is a {@link #DNF},
-     * the average is disqualified as a DNF unless configured so that DNFs do not automatically
-     * disqualify averages (by passing {@code false} as the value of the {@code disqualifyDNFs}
-     * parameter to {@link #AverageCalculator(int, boolean)}). If DNFs are allowed, then the
-     * average is the average time of all non-DNF solves, but will still be a DNF average if all
-     * solves are DNFs.
+     * stored values, not a truncated mean. If any currently recorded solve is a
+     * {@link Statistics#TIME_DNF}, the average is disqualified as a DNF unless configured so that
+     * DNFs do not automatically disqualify averages (by passing {@code false} as the value of the
+     * {@code disqualifyDNFs} parameter to {@link #AverageCalculator(int, boolean)}). If DNFs are
+     * allowed, then the average is the average time of all non-DNF solves, but will still be a DNF
+     * average if all solves are DNFs.
      * </p>
      * <p>
      * Where the value of "n" is 5 or greater, the average is the truncated arithmetic mean of the
@@ -516,10 +532,10 @@ public final class AverageCalculator {
      * </p>
      *
      * @return
-     *     The current (truncated( arithmetic mean of the most recently added values. If fewer
-     *     times have been added that the number required, the result will be {@link #UNKNOWN}.
-     *     If too many DNF solves are included in the recently-added times, the result is
-     *     {@code DNF}. The returned integer value of the average is truncated (rounded down).
+     *     The current (truncated) arithmetic mean of the most recently added values. The time is
+     *     rounded per WCA Regulations for "averages"/"means". If fewer times have been added that
+     *     the number required, the result will be {@link Statistics#TIME_UNKNOWN}. If too many DNF
+     *     solves are included in the recently-added times, the result is {@code TIME_DNF}.
      */
     public long getCurrentAverage() {
         return mCurrentAverage;
@@ -530,34 +546,39 @@ public final class AverageCalculator {
      * times considered is given by {@link #getN()}. The average for each consecutive sequence of
      * that number of times (including DNFs) is calculated as each new time is added and the best
      * average of all of those sequences is returned. See {@link #getCurrentAverage()} for more
-     * details.
+     * details. The time is rounded per WCA Regulations for "averages"/"means".
      *
      * @return
      *     The best truncated arithmetic mean across all added values. If fewer times have been
-     *     added that the number required, the result will be {@link #UNKNOWN}. If too many DNF
-     *     solves are included in <i>all</i> sequences of times, the result is {@link #DNF}.
+     *     added that the number required, the result will be {@link Statistics#TIME_UNKNOWN}. If
+     *     too many DNF solves are included in <i>all</i> sequences of times, the result is
+     *     {@link Statistics#TIME_DNF}.
      */
     public long getBestAverage() {
         return mAllTimeBestAverage;
     }
 
     /**
-     * Gets the best time of all those added to this calculator.
+     * Gets the best time of all those added to this calculator. The time is rounded per WCA
+     * Regulations for "results".
      *
      * @return
-     *     The best time ever added to this calculator. The result will be {@link #UNKNOWN} if no
-     *     times have been added, or if all added times were {@link #DNF}s.
+     *     The best time ever added to this calculator. The result will be
+     *     {@link Statistics#TIME_UNKNOWN} if no times have been added, or if all added times
+     *     were {@link Statistics#TIME_DNF}.
      */
     public long getBestTime() {
         return mAllTimeBestTime;
     }
 
     /**
-     * Gets the worst time (not a DNF) of all those added to this calculator.
+     * Gets the worst time (not a DNF) of all those added to this calculator. The time is rounded
+     * per WCA Regulations for "results".
      *
      * @return
-     *     The worst time ever added to this calculator. The result will be {@link #UNKNOWN} if no
-     *     times have been added, or if all added times were {@link #DNF}s.
+     *     The worst time ever added to this calculator. The result will be
+     *     {@link Statistics#TIME_UNKNOWN} if no times have been added, or if all added times
+     *     were {@link Statistics#TIME_DNF}.
      */
     public long getWorstTime() {
         return mAllTimeWorstTime;
@@ -585,29 +606,41 @@ public final class AverageCalculator {
     }
 
     /**
-     * Gets the total time of all non-DNF solves that were added to this calculator.
+     * Gets the total time of all non-DNF solves that were added to this calculator. As elapsed
+     * time incurred during DNF solves is not recorded, this method is <i>not</i> suitable as a
+     * source of the total cumulative solve time over the recorded solve attempts. The value is
+     * a simple sum of the "results" passed to this calculator. The "results" are already rounded,
+     * but no further rounding is applied to this total time. For example, if the results are
+     * rounded to the nearest (not greater) multiple of 0.01 seconds and the total of a number of
+     * such results exceeds 10 minutes, the value is <i>not</i> then rounded to the nearest whole
+     * second.
      *
      * @return
      *     The total time of all non-DNF solves that were added to this calculator. The result
-     *     will be {@link #UNKNOWN} if no times have been added, or if all added times were
-     *     {@link #DNF}s.
+     *     will be {@link Statistics#TIME_UNKNOWN} if no times have been added, or if all added
+     *     times were {@link Statistics#TIME_DNF}.
      */
-    public long getTotalTime() {
+    // Default (package) access, as this method is really only of use to the unit tests. For a
+    // more meaningful "total time", see "Statistics".
+    @VisibleForTesting
+    long getTotalTime() {
         return mAllTimeSum;
     }
 
     /**
      * Gets the simple arithmetic mean time of all non-DNF solves that were added to this
-     * calculator. The returned millisecond value is truncated to a whole milliseconds value, not
-     * rounded.
+     * calculator. The returned millisecond value is rounded in accordance with WCA Regulations
+     * for rounding "means" (if it is known).
      *
      * @return
      *     The mean time of all non-DNF solves that were added to this calculator. The result
-     *     will be {@link #UNKNOWN} if no times have been added, or if all added times were
-     *     {@link #DNF}s.
+     *     will be {@link Statistics#TIME_UNKNOWN} if no times have been added, or if all added
+     *     times were {@link Statistics#TIME_DNF}.
      */
     public long getMeanTime() {
-        return mAllTimeSum != UNKNOWN ? mAllTimeSum / (mNumSolves - mNumAllTimeDNFs) : UNKNOWN;
+        return mAllTimeSum != TIME_UNKNOWN
+                ? WCAMath.roundAverage(mAllTimeSum / (mNumSolves - mNumAllTimeDNFs))
+                : TIME_UNKNOWN;
     }
 
     /**
@@ -617,27 +650,6 @@ public final class AverageCalculator {
      */
     public AverageOfN getAverageOfN() {
         return new AverageOfN(this);
-    }
-
-    /**
-     * Translates a time value that may be {@link #UNKNOWN} or {@link #DNF} into a time value
-     * that is compatible with methods such as the {@code PuzzleUtils.convertTimeToString*}
-     * methods.
-     *
-     * @param time The time value to be translated.
-     *
-     * @return
-     *     The translated time value; {@code UNKNOWN} is translated to zero and {@code DNF} is
-     *     translated to {@link PuzzleUtils#TIME_DNF}.
-     */
-    public static long tr(long time) {
-        if (time == UNKNOWN) {
-            return 0L;
-        }
-        if (time == DNF) {
-            return PuzzleUtils.TIME_DNF;
-        }
-        return time;
     }
 
     /**
@@ -668,8 +680,9 @@ public final class AverageCalculator {
         private final int mWorstTimeIndex;
 
         /**
-         * The average-of-N value calculated for the times. May be {@link #DNF} if there are too
-         * many DNF solves, or {@link #UNKNOWN} if the are too few times (less than "N").
+         * The average-of-N value calculated for the times. May be {@link Statistics#TIME_DNF} if
+         * there are too many DNF solves, or {@link Statistics#TIME_UNKNOWN} if the are too few
+         * times (less than "N").
          */
         private final long mAverage;
 
@@ -681,10 +694,10 @@ public final class AverageCalculator {
         private AverageOfN(AverageCalculator ac) {
             final int n = ac.getN();
 
-            mAverage = ac.getCurrentAverage();
+            mAverage = ac.getCurrentAverage(); // Already rounded properly.
 
-            if (mAverage != UNKNOWN && ac.getNumSolves() >= n) {
-                mTimes = new long[n];
+            if (mAverage != TIME_UNKNOWN && ac.getNumSolves() >= n) {
+                mTimes = new long[n]; // Already rounded properly.
 
                 // The oldest time recorded in "ac.mTimes" is not necessarily the first one, as
                 // that array operates as a circular queue. "ac.mNext" marks one index past the
@@ -712,9 +725,10 @@ public final class AverageCalculator {
                 if (n >= MIN_N_TO_ALLOW_ONE_DNF && n > ac.mNumCurrentDNFs) { // At least 1 non-DNF.
                     // Do not identify the only non-DNF time as the best time.
                     final long bestTime
-                            = (n - ac.mNumCurrentDNFs > 1) ? ac.mCurrentBestTime : UNKNOWN;
+                            = (n - ac.mNumCurrentDNFs > 1) ? ac.mCurrentBestTime : TIME_UNKNOWN;
                     // Identify a DNF as the worst time if DNFs are present.
-                    final long worstTime = ac.mNumCurrentDNFs == 0 ? ac.mCurrentWorstTime : DNF;
+                    final long worstTime
+                            = ac.mNumCurrentDNFs == 0 ? ac.mCurrentWorstTime : TIME_DNF;
 
                     for (int i = 0; i < n && (bestIdx == -1 || worstIdx == -1); i++) {
                         // Use if...else... here to ensure that the best and worst times are not
@@ -739,12 +753,13 @@ public final class AverageCalculator {
         /**
          * Gets the array of values that contributed to the calculation of the average-of-N. If
          * too few values have been recorded (less than "N"), the array will be {@code null}. The
-         * times will be ordered with the oldest recorded time first and may include {@link #DNF}
-         * values. The best and worst times can be identified with {@link #getBestTimeIndex()} and
-         * {@link #getWorstTimeIndex()}.
+         * times will be ordered with the oldest recorded time first and may include
+         * {@link Statistics#TIME_DNF} values. The best and worst times can be identified with
+         * {@link #getBestTimeIndex()} and {@link #getWorstTimeIndex()}.
          *
          * @return
-         *     The array of times used to calculate the average. May be {@code null}.
+         *     The array of times used to calculate the average. May be {@code null}. Times are
+         *     rounded in accordance with WCA Regulations for "results".
          */
         public long[] getTimes() {
             return mTimes;
@@ -753,11 +768,13 @@ public final class AverageCalculator {
         /**
          * Gets the calculated average-of-N value. The calculation follows the normal rules for
          * the value of "N" that are applied by the average calculator from which this object was
-         * captured.
+         * captured. The value is rounded in accordance with WCA Regulations for "averages" and
+         * "means".
          *
          * @return
-         *     The average-of-N value. May be {@link #DNF} if the average was disqualified, or
-         *     {@link #UNKNOWN} if too few times have been recorded (i.e., less than "N").
+         *     The average-of-N value. May be {@link Statistics#TIME_DNF} if the average was
+         *     disqualified, or {@link Statistics#TIME_UNKNOWN} if too few times have been
+         *     recorded (i.e., less than "N").
          */
         public long getAverage() {
             return mAverage;

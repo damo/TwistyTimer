@@ -2,8 +2,9 @@ package com.aricneto.twistytimer.adapter;
 
 import android.content.Context;
 import android.database.Cursor;
+import android.graphics.Paint;
+import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentManager;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.CardView;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
@@ -15,16 +16,19 @@ import android.widget.TextView;
 
 import com.aricneto.twistify.R;
 import com.aricneto.twistytimer.TwistyTimer;
+import com.aricneto.twistytimer.database.DatabaseHandler;
 import com.aricneto.twistytimer.fragment.TimerListFragment;
-import com.aricneto.twistytimer.fragment.dialog.TimeDialog;
+import com.aricneto.twistytimer.fragment.dialog.EditSolveDialog;
+import com.aricneto.twistytimer.items.Solve;
 import com.aricneto.twistytimer.listener.DialogListener;
-import com.aricneto.twistytimer.utils.PuzzleUtils;
+import com.aricneto.twistytimer.utils.MainState;
 import com.aricneto.twistytimer.utils.ThemeUtils;
+import com.aricneto.twistytimer.utils.TimeUtils;
 
 import org.joda.time.DateTime;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
+import java.util.HashSet;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -32,29 +36,33 @@ import butterknife.ButterKnife;
 import static com.aricneto.twistytimer.utils.TTIntent.*;
 
 /**
- * Created by Ari on 05/06/2015.
+ * A cursor adapter to support the presentation of the solve times in the {@link TimerListFragment}.
+ * This cursor adapter handles the binding between the data and the "time cards" displayed in the
+ * list/grid of selected solve times. When a time-card is clicked.
  */
+public class TimeCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHolder>
+        implements DialogListener {
+    private final Context         mContext;  // Current context
+    private final FragmentManager mFragmentManager;
 
-public class TimeCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHolder> implements DialogListener {
-    private final Context           mContext;  // Current context
-    private final FragmentManager   mFragmentManager;
+    private int mCardColor;
+    private int mSelectedCardColor;
 
-    int cardColor;
-    int selectedCardColor;
+    private boolean mIsInSelectionMode;
 
-    private boolean isInSelectionMode;
-
-    private List<Long> selectedItems = new ArrayList<>();
+    // A Set will be more efficient than a List, as "contains(Long)" is used a lot.
+    private Collection<Long> mSelectedSolveIDs = new HashSet<>();
 
     // Locks opening new windows until the last one is dismissed
-    private boolean isLocked;
+    private boolean mIsLocked;
 
     public TimeCursorAdapter(Context context, Cursor cursor, TimerListFragment listFragment) {
         super(cursor);
-        this.mContext = context;
-        this.mFragmentManager = listFragment.getFragmentManager();
-        cardColor = ThemeUtils.fetchAttrColor(mContext, R.attr.colorItemListBackground);
-        selectedCardColor = ThemeUtils.fetchAttrColor(mContext, R.attr.colorItemListBackgroundSelected);
+        mContext = context;
+        mFragmentManager = listFragment.getFragmentManager();
+        mCardColor = ThemeUtils.fetchAttrColor(mContext, R.attr.colorItemListBackground);
+        mSelectedCardColor
+                = ThemeUtils.fetchAttrColor(mContext, R.attr.colorItemListBackgroundSelected);
     }
 
     @Override
@@ -66,20 +74,17 @@ public class TimeCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHo
 
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        final View v;
-        RecyclerView.ViewHolder viewHolder;
-        LayoutInflater inflater = LayoutInflater.from(parent.getContext());
+        final LayoutInflater inflater = LayoutInflater.from(parent.getContext());
 
-        v = inflater.inflate(R.layout.item_time_list, parent, false);
-        viewHolder = new TimeHolder(v);
-
-        return viewHolder;
+        return new TimeHolder(inflater.inflate(R.layout.item_time_list, parent, false));
     }
 
     @Override
-    public void onBindViewHolderCursor(final RecyclerView.ViewHolder viewHolder, final Cursor cursor) {
-        TimeHolder holder = (TimeHolder) viewHolder;
-        handleTime(holder, cursor);
+    public void onBindViewHolderCursor(RecyclerView.ViewHolder viewHolder, Cursor cursor) {
+        // Assume that the loader of the cursor used "DatabaseHandler.getAllSolvesFor()". If so,
+        // "DatabaseHandler.getCurrentSolve()" is a convenient way to avoid all the drama around
+        // column indices and column names.
+        bindSolveToViewHolder((TimeHolder) viewHolder, DatabaseHandler.getCurrentSolve(cursor));
     }
 
     @Override
@@ -89,65 +94,54 @@ public class TimeCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHo
 
     @Override
     public void onDismissDialog() {
-        setIsLocked(false);
-    }
-
-    private boolean isSelected(long id) {
-        return selectedItems.contains(id);
+        setLocked(false);
     }
 
     public void unselectAll() {
-        selectedItems.clear();
-        isInSelectionMode = false;
+        mSelectedSolveIDs.clear();
+        mIsInSelectionMode = false;
         broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SELECTION_MODE_OFF);
     }
 
-    public void deleteAllSelected() {
-        TwistyTimer.getDBHandler().deleteSolvesByID(selectedItems, null); // Ignore progress.
-        broadcast(CATEGORY_TIME_DATA_CHANGES, ACTION_TIMES_MODIFIED);
+    public void deleteAllSelected(@NonNull final MainState mainState) {
+        // Perform this operation on another thread. It will broadcast the required action intent
+        // to notify interested parties after the change has been made.
+        TwistyTimer.getDBHandler().deleteSolvesByIDAndNotifyAsync(mSelectedSolveIDs, mainState);
     }
 
     private void toggleSelection(long id, CardView card) {
-        if (! isSelected(id)) {
+        // TODO: Have this class track the number of selections and add that to the intent. There
+        // will be no need for separate actions for selection mode and selected times.
+        if (! mSelectedSolveIDs.contains(id)) {
+            mSelectedSolveIDs.add(id);
+            card.setCardBackgroundColor(mSelectedCardColor);
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_TIME_SELECTED);
-            selectedItems.add(id);
-            card.setCardBackgroundColor(selectedCardColor);
         } else {
+            mSelectedSolveIDs.remove(id);
+            card.setCardBackgroundColor(mCardColor);
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_TIME_UNSELECTED);
-            selectedItems.remove(id);
-            card.setCardBackgroundColor(cardColor);
         }
 
-        if (selectedItems.size() == 0) {
+        if (mSelectedSolveIDs.size() == 0) {
+            mIsInSelectionMode = false;
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SELECTION_MODE_OFF);
-            isInSelectionMode = false;
         }
     }
 
-    private void handleTime(final TimeHolder holder, final Cursor cursor) {
-        final long mId = cursor.getLong(0); // id
-        final int pTime = cursor.getInt(3); // time
-        final int pPenalty = cursor.getInt(6); // penalty
-        final long pDate = cursor.getLong(4); // date
-        final String pComment = cursor.getString(7); // comment
-
-        holder.dateText.setText(new DateTime(pDate).toString("dd'/'MM"));
-
-        if (isSelected(mId))
-            holder.card.setCardBackgroundColor(selectedCardColor);
-        else
-            holder.card.setCardBackgroundColor(cardColor);
+    private void bindSolveToViewHolder(final TimeHolder holder, final Solve solve) {
+        holder.card.setCardBackgroundColor(
+                mSelectedSolveIDs.contains(solve.getID()) ? mSelectedCardColor : mCardColor);
 
         holder.root.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (isInSelectionMode)
-                    toggleSelection(mId, holder.card);
-                else if (! isLocked()) {
-                    setIsLocked(true);
-                    TimeDialog timeDialog = TimeDialog.newInstance(mId);
+                if (mIsInSelectionMode) {
+                    toggleSelection(solve.getID(), holder.card);
+                } else if (!isLocked()) {
+                    setLocked(true);
+                    EditSolveDialog timeDialog = EditSolveDialog.newInstance(solve);
+//                    timeDialog.setDialogListener(TimeCursorAdapter.this);
                     timeDialog.show(mFragmentManager, "time_dialog");
-                    timeDialog.setDialogListener(TimeCursorAdapter.this);
                 }
             }
         });
@@ -155,47 +149,56 @@ public class TimeCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHo
         holder.root.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
-                if (! isInSelectionMode) {
-                    isInSelectionMode = true;
+                if (!mIsInSelectionMode) {
+                    mIsInSelectionMode = true;
                     broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SELECTION_MODE_ON);
-                    toggleSelection(mId, holder.card);
+                    toggleSelection(solve.getID(), holder.card);
                 }
                 return true;
             }
         });
 
-        holder.timeText.setText(PuzzleUtils.convertTimeToString(pTime));
-        holder.penaltyText.setTextColor(ContextCompat.getColor(mContext, R.color.red_material));
-
-        switch (pPenalty) {
-            case PuzzleUtils.PENALTY_DNF:
-                holder.timeText.setText("DNF");
+        // IMPORTANT: "holder" may be recycled, so be sure to bind the sub-views completely to
+        // override all fields of the solve that may previously have used the same holder.
+        holder.dateText.setText(new DateTime(solve.getDate()).toString("dd'/'MM"));
+        // "time" is formatted "pretty" with smaller text for field with smallest units. The time
+        // given must be already rounded (which is done in "Solve.getTime()").
+        holder.timeText.setText(TimeUtils.formatResultPretty(solve.getTime()));
+        holder.timeText.setPaintFlags(
+                holder.timeText.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG)); // Clear.
+/* FIXME!!!
+        switch (solve.getPenalty()) {
+            default:
+            case NONE:
                 holder.penaltyText.setVisibility(View.GONE);
                 break;
-            case PuzzleUtils.PENALTY_PLUSTWO:
-                holder.penaltyText.setText("+2");
+
+            case DNF:
+                // For a DNF, strike out the time value. This allows the user to see what the
+                // elapsed time was for the DNF, which may help to find "rogue" times.
+                holder.timeText.setPaintFlags(
+                        holder.timeText.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG); // Set.
+                // fall through
+            case PLUS_TWO:
+                holder.penaltyText.setText(solve.getPenalty().getDescriptionResID());
                 holder.penaltyText.setVisibility(View.VISIBLE);
                 break;
-            default:
-                holder.penaltyText.setVisibility(View.GONE);
-                break;
         }
-
-        if (! pComment.equals("")) {
+*/
+        if (solve.hasComment()) {
             holder.commentIcon.setVisibility(View.VISIBLE);
         } else {
             // This else is needed because the view recycles.
             holder.commentIcon.setVisibility(View.GONE);
         }
-
     }
 
-    public boolean isLocked() {
-        return isLocked;
+    private boolean isLocked() {
+        return mIsLocked;
     }
 
-    public void setIsLocked(boolean isLocked) {
-        this.isLocked = isLocked;
+    private void setLocked(boolean isLocked) {
+        mIsLocked = isLocked;
     }
 
     static class TimeHolder extends RecyclerView.ViewHolder {
