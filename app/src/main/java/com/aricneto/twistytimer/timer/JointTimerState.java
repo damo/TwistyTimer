@@ -157,24 +157,28 @@ class JointTimerState implements Parcelable {
      * runs to completion, call {@link #commit()} to accept the new current
      * state and erase the previous timer state.
      *
+     * @return The new "current" timer state.
+     *
      * @throws IllegalStateException
      *     If the current stage is not {@link TimerStage#STOPPED STOPPED}.
      *     Pushing a new state from other stages is not permitted, as it
      *     would break a running timer or would overwrite the backed-up
      *     previous state.
      */
-    void push() throws IllegalStateException {
+    TimerState push() throws IllegalStateException {
         // NOTE: This check will help to detect bugs that might otherwise be
         // tricky to pin down.
         final TimerStage stage = mCurrentState.getStage();
 
         if (stage != TimerStage.STOPPED) {
             throw new IllegalStateException(
-                "Cannot push() the timer state when stage is '" + stage + "'.");
+                "Cannot 'push' the timer state when stage is '" + stage + "'.");
         }
 
         mPreviousState = mCurrentState;
-        mCurrentState = mPrototypeState.newUnusedState();
+        mCurrentState  = mPrototypeState.newUnusedState();
+
+        return mCurrentState;
     }
 
     /**
@@ -190,25 +194,30 @@ class JointTimerState implements Parcelable {
      * (roll-back).
      * </p>
      *
+     * @return The "current" timer state that has been committed.
+     *
      * @throws IllegalStateException
      *     If the {@code Solve} instance on the current state is {@code null}.
      *     The instance should have been set at the start of the solve attempt
      *     that is now being committed.
      */
-    void commit() throws IllegalStateException {
-        final Solve newSolve = mCurrentState.getSolve();
+    TimerState commit() throws IllegalStateException {
+        final Solve solve = mCurrentState.getSolve();
 
-        if (newSolve == null) {
+        if (solve == null) {
             throw new IllegalStateException("The solve was never set.");
         }
 
-        // The elapsed time that is set includes any time penalties.
-        newSolve.setTime(mCurrentState.getResultTime());
-        newSolve.setPenalties(mCurrentState.getPenalties());
-        newSolve.setDate(System.currentTimeMillis());
+        mCurrentState.setSolve(
+            // The elapsed time that is set includes any time penalties.
+            solve.withTime(mCurrentState.getResultTime())
+                 .withPenalties(mCurrentState.getPenalties())
+                 .withDate(System.currentTimeMillis()));
 
         // Erase the previous state. Bit of a no-op, but it avoids confusion.
         mPreviousState = mPrototypeState.newUnusedState();
+
+        return mCurrentState;
     }
 
     /**
@@ -219,23 +228,29 @@ class JointTimerState implements Parcelable {
      * previous state was already discarded by {@link #commit()}, this method
      * will have the same effect as calling {@link #reset()}.
      *
+     * @return
+     *     The new "current" timer state. This is the restored "previous" state
+     *     that replaced the popped (and discarded) state.
+     *
      * @throws IllegalStateException
-     *     If the current stage is not {@link TimerStage#STOPPED STOPPED}.
+     *     If the current stage is not {@link TimerStage#CANCELLING}.
      *     Restoring the previous state when the current state is at any
      *     other stage is not permitted.
      */
-    void pop() throws IllegalStateException {
+    TimerState pop() throws IllegalStateException {
         // NOTE: This check will help to detect bugs that might otherwise be
         // tricky to pin down.
         final TimerStage stage = mCurrentState.getStage();
 
-        if (stage != TimerStage.STOPPED) {
+        if (stage != TimerStage.CANCELLING) {
             throw new IllegalStateException(
-                "Cannot pop() the timer state when stage is '" + stage + "'.");
+                "Cannot 'pop' the timer state when stage is '" + stage + "'.");
         }
 
-        mCurrentState = mPreviousState;
+        mCurrentState  = mPreviousState;
         mPreviousState = mPrototypeState.newUnusedState();
+
+        return mCurrentState;
     }
 
     /**
@@ -244,12 +259,14 @@ class JointTimerState implements Parcelable {
      * and previous timer states will be discarded and the current state will
      * be at the {@link TimerStage#UNUSED UNUSED} stage.
      *
+     * @return The new "current" timer state.
+     *
      * @throws IllegalStateException
      *     If the current stage is not already
      *     {@link TimerStage#STOPPED STOPPED} or {@code UNUSED}. Resetting
      *     the state from other stages is not permitted.
      */
-    void reset() {
+    TimerState reset() {
         // NOTE: This check will help to detect bugs that might otherwise be
         // tricky to pin down.
         final TimerStage stage = mCurrentState.getStage();
@@ -260,8 +277,10 @@ class JointTimerState implements Parcelable {
                 "Cannot reset timer state when stage is '" + stage + "'.");
         }
 
-        mCurrentState = mPrototypeState.newUnusedState();
+        mCurrentState  = mPrototypeState.newUnusedState();
         mPreviousState = mPrototypeState.newUnusedState();
+
+        return mCurrentState;
     }
 
     /**

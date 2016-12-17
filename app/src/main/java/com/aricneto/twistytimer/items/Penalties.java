@@ -70,7 +70,7 @@ public final class Penalties {
     // A4d1: +2 for overrunning the (15 seconds) inspection time.
     // A4e:  These pre-start penalties are cumulative.
     // Total count is 4, unless A4b1 can be repeated.
-    public static final int MAX_PRE_START_PLUS_TWOS = 4;
+    static final int MAX_PRE_START_PLUS_TWOS = 4;
 
     /**
      * The maximum number of "+2" penalties that can be incurred in the
@@ -84,7 +84,7 @@ public final class Penalties {
     // A6e:  +2 if the puzzle is touched again after releasing it. [Repeatable?]
     // A6i:  These post-start penalties are cumulative.
     // Total count is 4, unless A6e can be repeated.
-    public static final int MAX_POST_START_PLUS_TWOS = 4;
+    static final int MAX_POST_START_PLUS_TWOS = 4;
 
     /**
      * <p>
@@ -344,7 +344,7 @@ public final class Penalties {
      *     time is 4 x 2 = +8 seconds (+8,000 ms).
      */
     public int getPreStartPlusTwoCount() {
-        return mPreStartPenalties >>> 2;
+        return mPreStartPenalties >>> 1;
     }
 
     /**
@@ -387,7 +387,7 @@ public final class Penalties {
      *     time is 4 x 2 = +8 seconds (+8,000 ms).
      */
     public int getPostStartPlusTwoCount() {
-        return mPostStartPenalties >>> 2;
+        return mPostStartPenalties >>> 1;
     }
 
     /**
@@ -450,16 +450,15 @@ public final class Penalties {
      * the penalties may be incurred.
      *
      * @param penalty
-     *     The penalty to be incurred. If {@link Penalty#NONE} or {@code
-     *     null}, the penalty will be ignored. Only one DNF penalty can be
-     *     incurred in total across both the pre- and post-start penalties;
-     *     further DNF penalties will be ignored. More than one "+2" penalty
-     *     may be added and will be accumulated, but there is a maximum limit
-     *     on the number of "+2" penalties. A DNF penalty does not replace a
-     *     "+2" penalty already incurred. If any post-start penalties have
-     *     already been incurred, even a "+2" penalty, then a pre-start DNF
-     *     penalty cannot be incurred without first annulling all of the
-     *     post-start penalties.
+     *     The penalty to be incurred. If {@link Penalty#NONE} or {@code null},
+     *     the penalty will be ignored. Only one DNF penalty can be incurred in
+     *     total across both the pre- and post-start penalties; further DNF
+     *     penalties will be ignored. More than one "+2" penalty may be added
+     *     and will be accumulated, but there is a maximum limit on the number
+     *     of "+2" penalties. A DNF penalty does not replace a "+2" penalty
+     *     already incurred. If any post-start penalties have already been
+     *     incurred, even a "+2" penalty, then a pre-start DNF penalty cannot
+     *     be incurred without first annulling all of the post-start penalties.
      *
      * @return
      *     A new {@code Penalties} instance with additional incurred penalty;
@@ -481,6 +480,7 @@ public final class Penalties {
     }
 
     /**
+     * <p>
      * Incurs an additional penalty in the phase of the attempt after the
      * solve timer starts. This can be while the solve timer is running, or
      * after the solve timer has stopped. These penalties are not fixed and
@@ -488,6 +488,10 @@ public final class Penalties {
      * present, the user interface allows these to be incurred "manually" by
      * the user after the solve timer is stopped. There is no restriction on
      * the order in which the penalties may be incurred.
+     * </p>
+     * <p>
+     * See also {@link #canIncurPostStartPenalty(Penalty)}.
+     * </p>
      *
      * @param penalty
      *     The penalty to be incurred. If {@link Penalty#NONE} or {@code
@@ -505,7 +509,6 @@ public final class Penalties {
      */
     @CheckResult // ... because *this* "Penalties" instance is not changed.
     public Penalties incurPostStartPenalty(@Nullable Penalty penalty) {
-        // Cannot incur any post-start penalties after a pre-start DNF.
         if (!hasPreStartDNF()) {
             if (penalty == Penalty.PLUS_TWO
                     && getPostStartPlusTwoCount() < MAX_POST_START_PLUS_TWOS) {
@@ -522,17 +525,41 @@ public final class Penalties {
     }
 
     /**
+     * Indicates if a further post-start penalty can be incurred. See the
+     * description of {@link #incurPostStartPenalty(Penalty)} for details of
+     * the conditions under which post-start penalties may or may not be
+     * incurred. No changes are made to this {@code Penalties} instance.
+     *
+     * @param penalty
+     *     The penalty proposed as the extra post-start penalty.
+     *
+     * @return
+     *     {@code true} if the given post-start penalty can be incurred; or
+     *     {@code false} if the penalty cannot be incurred or is {@code null}.
+     */
+    public boolean canIncurPostStartPenalty(@Nullable Penalty penalty) {
+        // This is the simplest implementation, though it has the overhead of
+        // creating and discarding objects when the result is "true".
+        return incurPostStartPenalty(penalty) != this;
+    }
+
+    /**
+     * <p>
      * Annuls a penalty incurred in the phase of the attempt after the solve
      * timer starts. This can be while the solve timer is running, or after
      * the solve timer has stopped. There is no restriction on the order in
      * which the penalties may be annulled. If there are multiple "+2"
      * penalties, only one will be annulled with each call to this method.
+     * </p>
+     * <p>
+     * See also {@link #canAnnulPostStartPenalty(Penalty)}.
+     * </p>
      *
      * @param penalty
      *     The penalty to be annulled. If the penalty was not previously
-     *     incurred, or all penalties of that type have already been
-     *     annulled, it will be ignored. If {@link Penalty#NONE} or {@code
-     *     null}, no penalty will be annulled.
+     *     incurred, or all penalties of that type have already been annulled,
+     *     it will be ignored. If {@link Penalty#NONE} or {@code null}, no
+     *     penalty will be annulled.
      *
      * @return
      *     A new {@code Penalties} instance with one penalty annulled; or
@@ -549,6 +576,23 @@ public final class Penalties {
         }
 
         return this;
+    }
+
+    /**
+     * Indicates if a post-start penalty can be annulled. See the description
+     * of {@link #annulPostStartPenalty(Penalty)} for details of the conditions
+     * under which post-start penalties may or may not be annulled. No changes
+     * are made to this {@code Penalties} instance.
+     *
+     * @param penalty
+     *     The penalty proposed as the extra post-start penalty.
+     *
+     * @return
+     *     {@code true} if the given post-start penalty can be incurred; or
+     *     {@code false} if the penalty cannot be incurred or is {@code null}.
+     */
+    public boolean canAnnulPostStartPenalty(@Nullable Penalty penalty) {
+        return annulPostStartPenalty(penalty) != this;
     }
 
     /**

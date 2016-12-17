@@ -1,6 +1,5 @@
 package com.aricneto.twistytimer.fragment;
 
-
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -41,7 +40,6 @@ import com.aricneto.twistytimer.layout.Fab;
 import com.aricneto.twistytimer.listener.OnBackPressedInFragmentListener;
 import com.aricneto.twistytimer.stats.Statistics;
 import com.aricneto.twistytimer.stats.StatisticsCache;
-import com.aricneto.twistytimer.utils.FireAndForgetExecutor;
 import com.aricneto.twistytimer.utils.MainState;
 import com.aricneto.twistytimer.utils.Prefs;
 import com.aricneto.twistytimer.utils.PuzzleUtils;
@@ -63,8 +61,9 @@ import co.mobiwise.materialintro.view.MaterialIntroView;
 import static com.aricneto.twistytimer.utils.TTIntent.*;
 
 public class TimerListFragment extends BaseMainFragment
-        implements LoaderManager.LoaderCallbacks<Cursor>, OnBackPressedInFragmentListener,
-        StatisticsCache.StatisticsObserver {
+       implements LoaderManager.LoaderCallbacks<Cursor>,
+                  OnBackPressedInFragmentListener,
+                  StatisticsCache.StatisticsObserver {
     /**
      * Flag to enable debug logging for this class.
      */
@@ -99,35 +98,42 @@ public class TimerListFragment extends BaseMainFragment
     private TimeCursorAdapter timeCursorAdapter;
 
     /**
-     * The most recently notified solve time statistics. These may be used when sharing averages.
+     * The most recently notified solve time statistics. These may be used when
+     * sharing averages.
      */
-    // Does not need to be saved to the instance state, as it will be restored automatically.
+    // Does not need to be saved to the instance state, as it will be restored
+    // automatically.
     private Statistics mRecentStatistics;
 
-    private final View.OnClickListener clickListener = new View.OnClickListener() {
+    private final View.OnClickListener clickListener
+        = new View.OnClickListener() {
         @Override
         public void onClick(View view) {
-            final MainState mainState = getMainState(); // Should be attached if being clicked.
+            // Should be attached if being clicked.
+            final MainState mainState = getMainState();
 
             switch (view.getId()) {
                 case R.id.fab_share_ao12:
-                    if (!PuzzleUtils.shareAverageOf(12, mRecentStatistics, getActivity())) {
-                        Toast.makeText(getContext(), R.string.fab_share_error, Toast.LENGTH_SHORT)
-                                .show();
+                    if (!PuzzleUtils.shareAverageOf(12, mRecentStatistics,
+                            getActivity())) {
+                        Toast.makeText(getContext(), R.string.fab_share_error,
+                            Toast.LENGTH_SHORT).show();
                     }
                     break;
 
                 case R.id.fab_share_ao5:
-                    if (!PuzzleUtils.shareAverageOf(5, mRecentStatistics, getActivity())) {
-                        Toast.makeText(getContext(), R.string.fab_share_error, Toast.LENGTH_SHORT)
-                                .show();
+                    if (!PuzzleUtils.shareAverageOf(5, mRecentStatistics,
+                            getActivity())) {
+                        Toast.makeText(getContext(), R.string.fab_share_error,
+                            Toast.LENGTH_SHORT).show();
                     }
                     break;
 
                 case R.id.fab_share_histogram:
-                    if (!PuzzleUtils.shareHistogram(mRecentStatistics, getActivity())) {
-                        Toast.makeText(getContext(), R.string.fab_share_error, Toast.LENGTH_SHORT)
-                                .show();
+                    if (!PuzzleUtils.shareHistogram(mRecentStatistics,
+                            getActivity())) {
+                        Toast.makeText(getContext(), R.string.fab_share_error,
+                            Toast.LENGTH_SHORT).show();
                     }
                     break;
 
@@ -135,37 +141,27 @@ public class TimerListFragment extends BaseMainFragment
                     new MaterialDialog.Builder(getContext())
                         .title(R.string.add_time)
                         .input(getString(R.string.add_time_hint), "", false,
-                                new MaterialDialog.InputCallback() {
+                            new MaterialDialog.InputCallback() {
                             @Override
                             public void onInput(
-                                    @NonNull MaterialDialog dialog, CharSequence input) {
-                                final long time = TimeUtils.parseTimeExternal(input.toString());
+                                    @NonNull MaterialDialog dialog,
+                                    CharSequence input) {
+                                final long time = TimeUtils.parseTimeExternal(
+                                    input.toString());
 
-                                if (time != 0) {
-                                    final Solve solve = new Solve(time,
-                                            mainState.getPuzzleType(), mainState.getSolveCategory(),
-                                            new DateTime().getMillis(), null,
-                                            Penalties.NO_PENALTIES, null, false);
-
-                                    // Run in the background to avoid stalling the UI.
-                                    // NOTE: "ACTION_TIME_ADDED" is broadcast *only* because the
-                                    // date stamp is "now". If the date were set in the dialog,
-                                    // then this might not be the "latest" time in the current
-                                    // session, so "ACTION_TIMES_MODIFIED" would be broadcast.
-                                    FireAndForgetExecutor.execute(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            // Add the ID for completeness and consistency (it
-                                            // is also added for solves created by the timer).
-                                            solve.setID(TwistyTimer.getDBHandler().addSolve(solve));
-                                            TTIntent.builder(
-                                                    CATEGORY_TIME_DATA_CHANGES, ACTION_TIME_ADDED)
-                                                    .solve(solve)
-                                                    .mainState(mainState)
-                                                    .broadcast();
-                                        }
-                                    });
+                                if (time == 0) {
+                                    return; // Time not in a valid format.
                                 }
+
+                                final Solve solve = new Solve(time,
+                                    mainState.getPuzzleType(),
+                                    mainState.getSolveCategory(),
+                                    new DateTime().getMillis(), null,
+                                    Penalties.NO_PENALTIES, null, false);
+
+                                // Run in background to avoid stalling the UI.
+                                TwistyTimer.getDBHandler()
+                                           .addSolveAndNotifyAsync(solve);
                             }
                         })
                         .positiveText(R.string.action_add)
@@ -176,39 +172,52 @@ public class TimerListFragment extends BaseMainFragment
         }
     };
 
-    // Receives broadcasts after changes have been made to time data or the selection of that data.
-    private final TTFragmentBroadcastReceiver mTimeDataChangedReceiver
-            = new TTFragmentBroadcastReceiver(this, CATEGORY_TIME_DATA_CHANGES) {
+    // Receives broadcasts after changes have been made to time data or the
+    // selection of that data.
+    private final TTFragmentBroadcastReceiver mSolveDataChangedReceiver
+        = new TTFragmentBroadcastReceiver(this, CATEGORY_SOLVE_DATA_CHANGES) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
             final MainState mainState = getMainState();
 
+            TTIntent.validate(intent);
+
             switch (intent.getAction()) {
-                case ACTION_TIME_ADDED:
-                    // When "history" is enabled, the list of times does not include times from
-                    // the current session. Times are only added to the current session, so
-                    // there is no need to refresh the list if it is showing the full "history"
-                    // when a new time is added to the current session.
-                    if (! mainState.isHistoryEnabled())
+                case ACTION_ONE_SOLVE_ADDED:
+                case ACTION_ONE_SOLVE_DELETED:
+                    // When "history" is enabled, the list of solves does not
+                    // include solves from the current session. Only reload the
+                    // list when showing the same set of solves (current session
+                    // vs. past sessions) as the solve that was added/deleted.
+                    // This does not work for updated solves, as the update may
+                    // have changed the history flag. The puzzle type and solve
+                    // category are assumed to be the same.
+                    //noinspection ConstantConditions (validated above)
+                    if (mainState.isHistoryEnabled()
+                            == TTIntent.getSolve(intent).isHistory()) {
                         reloadList(mainState);
+                    }
                     break;
 
-                case ACTION_TIMES_MODIFIED:
+                case ACTION_ONE_SOLVE_UPDATED:
+                case ACTION_MANY_SOLVES_DELETED:
+                case ACTION_MANY_SOLVES_ADDED:
+                case ACTION_SOLVES_MOVED_TO_HISTORY:
                     reloadList(mainState);
                     break;
             }
         }
     };
 
-    // Receives broadcasts about UI interactions that require actions to be taken.
+    // Receives broadcasts for UI interactions that require actions to be taken.
     private final TTFragmentBroadcastReceiver mUIInteractionReceiver
-            = new TTFragmentBroadcastReceiver(this, CATEGORY_UI_INTERACTIONS) {
+        = new TTFragmentBroadcastReceiver(this, CATEGORY_UI_INTERACTIONS) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
             switch (intent.getAction()) {
-                case ACTION_DELETE_SELECTED_TIMES:
-                    // Operation will delete times and then broadcast "ACTION_TIMES_MODIFIED".
-                    timeCursorAdapter.deleteAllSelected(getMainState());
+                case ACTION_DELETE_SELECTED_SOLVES:
+                    // Operation will delete times and then broadcast an intent.
+                    timeCursorAdapter.deleteAllSelected();
                     break;
             }
         }
@@ -218,7 +227,8 @@ public class TimerListFragment extends BaseMainFragment
         // Required empty public constructor
     }
 
-    // We have to put a boolean history here because it resets when we change puzzles.
+    // We have to put a boolean history here because it resets when we change
+    // puzzles.
     public static TimerListFragment newInstance() {
         final TimerListFragment fragment = new TimerListFragment();
         if (DEBUG_ME) Log.d(TAG, "newInstance() -> " + fragment);
@@ -228,8 +238,10 @@ public class TimerListFragment extends BaseMainFragment
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        if (DEBUG_ME) Log.d(TAG, "onCreateView(savedInstanceState=" + savedInstanceState + ")");
-        View rootView = inflater.inflate(R.layout.fragment_time_list, container, false);
+        if (DEBUG_ME) Log.d(TAG, "onCreateView(savedInstanceState="
+                                 + savedInstanceState + ")");
+        View rootView = inflater.inflate(
+            R.layout.fragment_time_list, container, false);
         mUnbinder = ButterKnife.bind(this, rootView);
 
         materialSheetFab = new MaterialSheetFab<>(
@@ -254,9 +266,11 @@ public class TimerListFragment extends BaseMainFragment
         fabShareHistogram.setOnClickListener(clickListener);
         fabAddTime.setOnClickListener(clickListener);
 
-        // The "Clear" and "Archive" buttons are not shown if the history switch is enabled, or if
-        // the solve list is empty. See "setEmptyState", which is called from "onLoadFinished".
-        if (Prefs.getBoolean(R.string.pk_show_clear_button, R.bool.default_show_clear_button)) {
+        // The "Clear" and "Archive" buttons are not shown if the history
+        // switch is enabled, or if the solve list is empty. See
+        // "setEmptyState", which is called from "onLoadFinished".
+        if (Prefs.getBoolean(R.string.pk_show_clear_button,
+                             R.bool.default_show_clear_button)) {
             dividerView.setVisibility(View.VISIBLE);
             clearButton.setVisibility(View.VISIBLE);
             archiveButton.setCompoundDrawablesWithIntrinsicBounds(
@@ -267,12 +281,14 @@ public class TimerListFragment extends BaseMainFragment
             @Override
             public void onClick(View view) {
                 final Spannable text = new SpannableString(
-                        getString(R.string.move_solves_to_history_content) + "  ");
+                    getString(R.string.move_solves_to_history_content) + "  ");
 
-                text.setSpan(new ImageSpan(getContext(), R.drawable.ic_icon_history_demonstration),
-                        text.length() - 1, text.length(), 0);
+                text.setSpan(new ImageSpan(
+                        getContext(), R.drawable.ic_icon_history_demonstration),
+                    text.length() - 1, text.length(), 0);
 
-                // Do not get the main state in the "onCreateView" method, wait for this call-back.
+                // Do not get the main state in the "onCreateView" method, wait
+                // for this call-back.
                 final MainState mainState = getMainState();
 
                 new MaterialDialog.Builder(getContext())
@@ -280,16 +296,21 @@ public class TimerListFragment extends BaseMainFragment
                     .content(text)
                     .positiveText(R.string.action_move)
                     .negativeText(R.string.action_cancel)
-                    .neutralColor(ContextCompat.getColor(getContext(), R.color.black_secondary))
-                    .negativeColor(ContextCompat.getColor(getContext(), R.color.black_secondary))
+                    .neutralColor(ContextCompat.getColor(
+                        getContext(), R.color.black_secondary))
+                    .negativeColor(ContextCompat.getColor(
+                        getContext(), R.color.black_secondary))
                     .onPositive(new MaterialDialog.SingleButtonCallback() {
                         @Override
-                        public void onClick(
-                                @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            TwistyTimer.getDBHandler().moveAllSolvesToHistory(
-                                    mainState.getPuzzleType(), mainState.getSolveCategory());
-                            broadcast(CATEGORY_TIME_DATA_CHANGES, ACTION_TIMES_MOVED_TO_HISTORY);
-                            reloadList(mainState);
+                        public void onClick(@NonNull MaterialDialog dialog,
+                                            @NonNull DialogAction which) {
+                            // The list will be reloaded when the broadcast
+                            // receiver is notified that the task is complete.
+                            TwistyTimer
+                                .getDBHandler()
+                                .moveAllSolvesToHistoryAndNotifyAsync(
+                                    mainState.getPuzzleType(),
+                                    mainState.getSolveCategory());
                         }
                     })
                     .show();
@@ -299,7 +320,8 @@ public class TimerListFragment extends BaseMainFragment
         clearButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // Do not get the main state in the "onCreateView" method, wait for this call-back.
+                // Do not get the main state in the "onCreateView" method, wait
+                // for this call-back.
                 final MainState mainState = getMainState();
 
                 new MaterialDialog.Builder(getContext())
@@ -309,12 +331,15 @@ public class TimerListFragment extends BaseMainFragment
                     .negativeText(R.string.action_cancel)
                     .onPositive(new MaterialDialog.SingleButtonCallback() {
                         @Override
-                        public void onClick(
-                                @NonNull MaterialDialog dialog, @NonNull DialogAction which) {
-                            TwistyTimer.getDBHandler().deleteAllFromSession(
-                                    mainState.getPuzzleType(), mainState.getSolveCategory());
-                            broadcast(CATEGORY_TIME_DATA_CHANGES, ACTION_TIMES_MODIFIED);
-                            reloadList(mainState);
+                        public void onClick(@NonNull MaterialDialog dialog,
+                                            @NonNull DialogAction which) {
+                            // The list will be reloaded when the broadcast
+                            // receiver is notified that the task is complete.
+                            TwistyTimer
+                                .getDBHandler()
+                                .deleteAllSolvesFromSessionAndNotifyAsync(
+                                    mainState.getPuzzleType(),
+                                    mainState.getSolveCategory());
                         }
                     })
                     .show();
@@ -323,13 +348,15 @@ public class TimerListFragment extends BaseMainFragment
 
         setUpRecyclerView();
 
-        registerReceiver(mTimeDataChangedReceiver);
+        registerReceiver(mSolveDataChangedReceiver);
         registerReceiver(mUIInteractionReceiver);
 
-        // If the statistics are already loaded, the update notification will have been missed,
-        // so fire that notification now and start observing further updates.
+        // If the statistics are already loaded, the update notification will
+        // have been missed, so fire that notification now and start observing
+        // further updates.
         onStatisticsUpdated(StatisticsCache.getInstance().getStatistics());
-        StatisticsCache.getInstance().registerObserver(this); // Unregistered in "onDestroyView".
+        StatisticsCache.getInstance().registerObserver(this);
+        // Unregistered in "onDestroyView".
 
         return rootView;
     }
@@ -342,12 +369,13 @@ public class TimerListFragment extends BaseMainFragment
         super.onActivityCreated(savedInstanceState);
 
         // Wait until the activity is available, so "getMainState()" will work.
-        getLoaderManager().initLoader(MainActivity.TIME_LIST_LOADER_ID, null, this);
+        getLoaderManager().initLoader(
+            MainActivity.TIME_LIST_LOADER_ID, null, this);
     }
 
     /**
-     * Handles a change in the main state by triggering a re-load of the list of solve times to
-     * ensure they match the new state.
+     * Handles a change in the main state by triggering a re-load of the list
+     * of solve times to ensure they match the new state.
      *
      * @param newMainState The new main state.
      * @param oldMainState The old main state.
@@ -370,27 +398,29 @@ public class TimerListFragment extends BaseMainFragment
 
     @Override
     public void setUserVisibleHint(boolean isVisibleToUser) {
-        if (DEBUG_ME) Log.d(TAG, "setUserVisibleHint(isVisibleToUser=" + isVisibleToUser + ")");
+        if (DEBUG_ME) Log.d(TAG, "setUserVisibleHint(isVisibleToUser="
+                                 + isVisibleToUser + ")");
         super.setUserVisibleHint(isVisibleToUser);
 
         if (isResumed()) {
             if (isVisibleToUser) {
                 if (fabButton != null) {
-                    // Show FAB and intro (if intro was not already dismissed by the user in a
-                    // previous session) if the fragment has become visible.
+                    // Show FAB and intro (if intro was not already dismissed
+                    // by the user in a previous session) if the fragment has
+                    // become visible.
                     fabButton.show();
                     new MaterialIntroView.Builder(getActivity())
-                            .enableDotAnimation(false)
-                            .setFocusGravity(FocusGravity.CENTER)
-                            .setDelayMillis(600)
-                            .enableFadeAnimation(true)
-                            .enableIcon(false)
-                            .performClick(true)
-                            .dismissOnTouch(true)
-                            .setInfoText(getString(R.string.showcase_fab_average))
-                            .setTarget(fabButton)
-                            .setUsageId(SHOWCASE_FAB_ID)
-                            .show();
+                        .enableDotAnimation(false)
+                        .setFocusGravity(FocusGravity.CENTER)
+                        .setDelayMillis(600)
+                        .enableFadeAnimation(true)
+                        .enableIcon(false)
+                        .performClick(true)
+                        .dismissOnTouch(true)
+                        .setInfoText(getString(R.string.showcase_fab_average))
+                        .setTarget(fabButton)
+                        .setUsageId(SHOWCASE_FAB_ID)
+                        .show();
                 }
             } else if (materialSheetFab != null) {
                 // Hide sheet and FAB if the fragment is no longer visible.
@@ -400,16 +430,19 @@ public class TimerListFragment extends BaseMainFragment
     }
 
     /**
-     * Hides the sheet for the floating action button, if the sheet is currently open.
+     * Hides the sheet for the floating action button, if the sheet is currently
+     * open.
      *
      * @return
-     *     {@code true} if the "Back" button press was consumed to close the sheet; or
-     *     {@code false} if the sheet is not showing and the "Back" button press was ignored.
+     *     {@code true} if the "Back" button press was consumed to close the
+     *     sheet; or {@code false} if the sheet is not showing and the "Back"
+     *     button press was ignored.
      */
     @Override
     public boolean onBackPressedInFragment() {
         if (DEBUG_ME) Log.d(TAG, "onBackPressedInFragment()");
-        if (isResumed() && materialSheetFab != null && materialSheetFab.isSheetVisible()) {
+        if (isResumed() && materialSheetFab != null
+                && materialSheetFab.isSheetVisible()) {
             materialSheetFab.hideSheet();
             return true;
         }
@@ -421,7 +454,7 @@ public class TimerListFragment extends BaseMainFragment
         if (DEBUG_ME) Log.d(TAG, "onDetach()");
         super.onDetach();
         // To fix memory leaks
-        unregisterReceiver(mTimeDataChangedReceiver);
+        unregisterReceiver(mSolveDataChangedReceiver);
         unregisterReceiver(mUIInteractionReceiver);
         getLoaderManager().destroyLoader(MainActivity.TIME_LIST_LOADER_ID);
     }
@@ -429,7 +462,9 @@ public class TimerListFragment extends BaseMainFragment
     /**
      * Records the latest statistics for use when sharing such information.
      *
-     * @param stats The updated statistics. These will not be modified. May be {@code null}.
+     * @param stats
+     *     The updated statistics. These will not be modified. May be
+     *     {@code null}.
      */
     @Override
     public void onStatisticsUpdated(Statistics stats) {
@@ -439,14 +474,17 @@ public class TimerListFragment extends BaseMainFragment
 
     public void reloadList(@NonNull MainState mainState) {
         if (DEBUG_ME) Log.d(TAG, "reloadList(mainState=" + mainState + ')');
-        // Pass the main state as arguments to the loader. This keeps things nicely decoupled.
+        // Pass the main state as arguments to the loader. This keeps things
+        // nicely decoupled.
         getLoaderManager().restartLoader(
-                MainActivity.TIME_LIST_LOADER_ID, mainState.saveToBundle(new Bundle()), this);
+            MainActivity.TIME_LIST_LOADER_ID,
+            mainState.saveToBundle(new Bundle()), this);
     }
 
     @Override
     public Loader<Cursor> onCreateLoader(int id, @NonNull Bundle args) {
-        if (DEBUG_ME) Log.d(TAG, "onCreateLoader(id=" + id + ", args=" + args + ')');
+        if (DEBUG_ME) Log.d(TAG, "onCreateLoader(id=" + id
+                                 + ", args=" + args + ')');
         return new TimeListLoader(getMainState());
     }
 
@@ -469,12 +507,12 @@ public class TimerListFragment extends BaseMainFragment
             nothingText.setVisibility(View.VISIBLE);
             moveToHistory.setVisibility(View.GONE);
             if (mainState.isHistoryEnabled()) {
-                nothingHere.setImageDrawable(
-                        ContextCompat.getDrawable(getContext(), R.drawable.notherehistory));
+                nothingHere.setImageDrawable(ContextCompat.getDrawable(
+                    getContext(), R.drawable.notherehistory));
                 nothingText.setText(R.string.list_empty_state_message_history);
             } else {
-                nothingHere.setImageDrawable(
-                        ContextCompat.getDrawable(getContext(), R.drawable.nothere2));
+                nothingHere.setImageDrawable(ContextCompat.getDrawable(
+                    getContext(), R.drawable.nothere2));
                 nothingText.setText(R.string.list_empty_state_message);
             }
         } else {
@@ -494,9 +532,11 @@ public class TimerListFragment extends BaseMainFragment
 
         // Set different managers to support different orientations
         StaggeredGridLayoutManager gridLayoutManagerHorizontal =
-            new StaggeredGridLayoutManager(6, StaggeredGridLayoutManager.VERTICAL);
+            new StaggeredGridLayoutManager(
+                6, StaggeredGridLayoutManager.VERTICAL);
         StaggeredGridLayoutManager gridLayoutManagerVertical =
-            new StaggeredGridLayoutManager(3, StaggeredGridLayoutManager.VERTICAL);
+            new StaggeredGridLayoutManager(
+                3, StaggeredGridLayoutManager.VERTICAL);
 
         // Adapt to orientation
         if (parentActivity.getResources().getConfiguration().orientation

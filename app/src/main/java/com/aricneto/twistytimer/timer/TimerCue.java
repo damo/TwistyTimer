@@ -27,7 +27,7 @@ public enum TimerCue {
     // for the most part, a public subset of the timer state-machine's
     // "TimerStage" enum, though there are a few extras that are specific to
     // the needs of the UI. However, "Stage" is an internal ("private") enum
-    // for the "PuzzleTimer" FSM, so the documentation of this public "UICue"
+    // for the "PuzzleTimer" FSM, so the documentation of this public "TimerCue"
     // enum does not refer to those stages, or even to the fact that these
     // cues are fired (mostly) on stage transitions, as that is all
     // information behind the facade of this black box FSM.
@@ -83,8 +83,8 @@ public enum TimerCue {
     // management (e.g., saving or restoring "Solve" objects) from that UI
     // stuff. In fact, should these two sets of methods be separated from
     // each other by creating two separate interfaces? OnTimerResult and
-    // OnTimerUICue, for example. The refresh calls could go into the latter.
-    // What does the TimerWidget need in this respect? I think that just one
+    // OnTimerCue, for example. The refresh calls could go into the latter.
+    // What does the TimerView need in this respect? I think that just one
     // "CUE_STOPPING" is needed (not "CUE_RESET" and "CUE_CANCELLED") as the
     // stopped condition is always the same from the point of view of the
     // widget: show only the elapsed time, the penalties, etc.
@@ -99,30 +99,30 @@ public enum TimerCue {
 
     // OK....
     //
-    // The point of the UI cues is to provide just that, "cues", or "hints",
-    // to the UI to allow it TO DRIVE ITS OWN FINITE STATE MACHINE. Just like
-    // the "onTouch*", "onTick", etc. that are notified to "PuzzleTimer", it
-    // is up to the UI to actually manage its state. There is no point in
+    // The point of the timer cues is to provide just that, "cues", or "hints",
+    // to the timer UI to allow it TO DRIVE ITS OWN FINITE STATE MACHINE. Just
+    // like the "onTouch*", "onTick", etc. that are notified to "PuzzleTimer",
+    // it is up to the UI to actually manage its state. There is no point in
     // trying to do both things from the timer. Therefore, the timer need
     // only fire cues when something has changed in a manner that probably
     // requires SOME SORT of change to the UI. However, it is not the job of
     // the "PuzzleTimer" to do any hand-holding or to pollute itself with the
     // internal, and unpredictable, concerns of the UI. The primary focus
-    // should be on the needs of the "TimerWidget", while a few cues might be
+    // should be on the needs of the "TimerView", while a few cues might be
     // used to fill in any *glaring* gaps in the FSM within the
     // "TimerFragment", but only if they contribute significantly to some
     // simplification of that FSM and only if the cue is relatively generic.
     //
     // IMPORTANT: A key consequence of this is that when saved state is
     // restored, the fragment can save and restore its own FSM state that was
-    // established after a series of UI cues, so there will be no need to
-    // re-fire the UI cues when the "PuzzleTimer" state is restored.
+    // established after a series of timer cues, so there will be no need to
+    // re-fire the timer cues when the "PuzzleTimer" state is restored.
     //
     // FIXME: What about the cues that fire around the time of the "STOPPING"
     // or "CANCELLING" stages? In particular, is there a consistent approach
     // that should be taken to
 
-    // FIXME: What about the cues consumed by the "TimerWidget"? Should the
+    // FIXME: What about the cues consumed by the "TimerView"? Should the
     // "onTimerCue" and "onTimerRefresh*" be the only methods notified to the
     // widget? Should the "onTimerNewResult", etc. be reserved for fragment?
     // A clear separation might help to clarify the purpose of each subset of
@@ -130,7 +130,7 @@ public enum TimerCue {
     // widget to support adding listeners for two different sets of
     // call-backs and, perhaps, for adding more than one listener for each.
     // Perhaps, the "onTimerRefresh*" should be separated out. The refresh
-    // operations are *solely* the concern of the "TimerWidget". Having
+    // operations are *solely* the concern of the "TimerView". Having
     // multiple listeners for those calls would complicate the feedback of
     // the required refresh rate.
 
@@ -208,6 +208,26 @@ public enum TimerCue {
      * </p>
      */
     CUE_INSPECTION_SOLVE_HOLDING_FOR_START,
+
+    /**
+     * <p>
+     * The inspection period has started and the inspection timer is counting
+     * down. This cue may be notified more than once, as when
+     * {@link #CUE_INSPECTION_SOLVE_HOLDING_FOR_START} is notified, but the
+     * hold time is deemed too short. In that case, it will be followed by
+     * this cue again, instead of {@link #CUE_INSPECTION_SOLVE_READY_TO_START}.
+     * </p>
+     * <p>
+     * Expectation: The UI will show the current inspection time prominently,
+     * perhaps reverting any highlight that was applied to the when
+     * {@link #CUE_INSPECTION_READY_TO_START} was notified. The UI should
+     * expect regular update notifications of the remaining inspection time,
+     * as the countdown has begun. The puzzle start time ("0.00") should be
+     * displayed with less prominence, if it is displayed at all.
+     * </p>
+     */
+    // FIXME: Document this properly.
+    CUE_INSPECTION_RESUMED,
 
     /**
      * <p>
@@ -304,41 +324,37 @@ public enum TimerCue {
      * The inspection period is counting down and has reached zero. A +2
      * seconds penalty is incurred. The user must start the solve timer
      * within two seconds, or the inspection period will time out and a "DNF"
-     * penalty will be incurred and the attempt terminated. This cue may be
-     * notified after {@link #CUE_INSPECTION_SOLVE_HOLDING_FOR_START} or
-     * {@link #CUE_INSPECTION_SOLVE_READY_TO_START} has been notified.
+     * penalty will be incurred and the solve attempt terminated. This cue
+     * may be notified after {@link #CUE_INSPECTION_SOLVE_HOLDING_FOR_START}
+     * or {@link #CUE_INSPECTION_SOLVE_READY_TO_START} has been notified.
      * </p>
      * <p>
      * Expectation: The UI will continue to show (and update) the inspection
-     * time. The notified inspection time remaining will be zero or negative
-     * during the overrun period. The UI should make it clear that a "+2"
-     * penalty has been incurred and that the inspection time is fast running
-     * out. An audible or visual cue might be used. The UI should display the
-     * solve time as appropriate for the most recently notified cue (e.g., if
-     * {@link #CUE_INSPECTION_SOLVE_HOLDING_FOR_START} has been received and
-     * has not been rescinded by a subsequent {@link #CUE_INSPECTION_STARTED}
-     * cue).
+     * time. The inspection time remaining that is notified in refresh events
+     * will be zero or negative during the overrun period. The UI may indicate
+     * that a "+2" penalty has been incurred and that the inspection time is
+     * fast running out. An audible or visual cue might be used. The UI should
+     * display the solve time as appropriate for the most recently notified cue
+     * (e.g., if {@link #CUE_INSPECTION_SOLVE_HOLDING_FOR_START} has been
+     * received and has not been rescinded by a subsequent
+     * {@link #CUE_INSPECTION_STARTED} cue).
      * </p>
      */
-    CUE_INSPECTION_TIME_OVERRUN,
+    // FIXME: If a "hold" is lifted early, then "CUE_INSPECTION_STARTED" is
+    // re-fired. However, it would be better if "CUE_INSPECTION_OVERRUN" were
+    // re-fired instead if the time was overrun. Maybe it would be simpler to
+    // have a new cue, "CUE_INSPECTION_RESUMED" instead, as that would avoid
+    // having "CUE_INSPECTION_STARTED" mean two things: started for the first
+    // time having been cued as ready-to-start, or resumed after a hold was
+    // cancelled. The former requires the start cue highlighting to be cleared,
+    // but the latter requires the highlighting to be set depending on
+    // whether or not there is an overrun. "CUE_INSPECTION_RESUMED" would just
+    // mean: show the inspection time at full scale AND LEAVE THE HIGHLIGHTING
+    // UNCHANGED.
+    CUE_INSPECTION_OVERRUN,
 
-    /**
-     * <p>
-     * The inspection period has ended. This will be notified only once for a
-     * solve attempt and then only if inspection is enabled. If the
-     * inspection period completes normally, it is notified immediately
-     * before {@link #CUE_SOLVE_STARTED}. If the inspection period times out
-     * and the solve attempt is stopped with a DNF penalty, this is notified
-     * immediately before {@link #CUE_STOPPING}.
-     * </p>
-     * <p>
-     * Expectation: The UI will cease showing the inspection time.
-     * </p>
-     */
-    // FIXME: There is no "CUE_SOLVE_STOPPED". Rather than consider adding that,
-    // should this "CUE_INSPECTION_STOPPED" simply be removed. Only the
-    // "CUE_CANCELLING" and "CUE_STOPPING" cues are really needed.
-    CUE_INSPECTION_STOPPED,
+    // FIXME: Document this.
+    CUE_INSPECTION_TIME_OUT,
 
     /**
      * <p>
@@ -450,5 +466,5 @@ public enum TimerCue {
      * the timer is not running.
      * </p>
      */
-    CUE_STOPPING,
+    CUE_STOPPING;
 }

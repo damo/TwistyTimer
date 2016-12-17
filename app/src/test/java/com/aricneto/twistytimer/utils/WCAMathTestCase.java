@@ -6,21 +6,23 @@ import static com.aricneto.twistytimer.utils.WCAMath.*;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Tests for {@link WCAMath}. See the description of that class for details on the WCA Regulations
- * that are being tested here.
+ * Tests for {@link WCAMath}. See the description of that class for details on
+ * the WCA Regulations that are being tested here.
  *
  * @author damo
  */
 public class WCAMathTestCase {
     /**
-     * Tests the rounding of a value to the nearest multiple of another value. Half-up rounding
-     * is towards positive infinity for both positive and negative numbers.
+     * Tests the rounding of a value to the nearest multiple of another value.
+     * Half-up rounding is towards positive infinity for both positive and
+     * negative numbers.
      *
      * @throws Exception The the test cannot be executed.
      */
     @Test
     public void testRoundToMultiple() throws Exception {
-        // Note odd/even multiples exercise the detection of the mid-point for half-up rounding.
+        // Note odd/even multiples exercise the detection of the mid-point for
+        // half-up rounding.
 
         // Value is zero.
         assertEquals(0, roundToMultiple(0,  1));
@@ -65,19 +67,20 @@ public class WCAMathTestCase {
         assertEquals(15, roundToMultiple(17, 5));
         assertEquals(20, roundToMultiple(18, 5));
 
-        // Value is a negative number and multiple is an even number. Half-up rounding should be
-        // towards positive infinity. For example, if the multiple if 4, then 6 rounds half-up to
-        // 8, while -6 rounds half-up to -4 (not -8).
+        // Value is a negative number and multiple is an even number. Half-up
+        // rounding should be towards positive infinity. For example, if the
+        // multiple if 4, then 6 rounds half-up to 8, while -6 rounds half-up
+        // to -4 (not -8).
         assertEquals(  0, roundToMultiple( -1, 4));
-        assertEquals(  0, roundToMultiple( -2, 4)); // Half-*UP* towards +ve infinity!
+        assertEquals(  0, roundToMultiple( -2, 4)); // Towards +ve infinity.
         assertEquals( -4, roundToMultiple( -3, 4));
         assertEquals( -4, roundToMultiple( -4, 4));
         assertEquals( -4, roundToMultiple( -5, 4));
-        assertEquals( -4, roundToMultiple( -6, 4)); // Half-*UP* towards +ve infinity!
+        assertEquals( -4, roundToMultiple( -6, 4)); // Towards +ve infinity.
         assertEquals( -8, roundToMultiple( -7, 4));
         assertEquals( -8, roundToMultiple( -8, 4));
         assertEquals( -8, roundToMultiple( -9, 4));
-        assertEquals( -8, roundToMultiple(-10, 4)); // Half-*UP* towards +ve infinity!
+        assertEquals( -8, roundToMultiple(-10, 4)); // Towards +ve infinity.
         assertEquals(-12, roundToMultiple(-11, 4));
 
         // Value is a negative number and multiple is an odd number.
@@ -95,8 +98,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the rounding of a value to the nearest multiple of another value when the multiple is
-     * an illegal zero value.
+     * Tests the rounding of a value to the nearest multiple of another value
+     * when the multiple is an illegal zero value.
      */
     @Test(expected = IllegalArgumentException.class)
     public void testRoundToMultipleIllegalZeroMultiple() {
@@ -104,8 +107,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the rounding of a value to the nearest multiple of another value when the multiple is
-     * an illegal negative value.
+     * Tests the rounding of a value to the nearest multiple of another value
+     * when the multiple is an illegal negative value.
      */
     @Test(expected = IllegalArgumentException.class)
     public void testRoundToMultipleIllegalNegativeMultiple() {
@@ -113,8 +116,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the truncation of a value to the nearest multiple of a second value not greater than
-     * the first value.
+     * Tests the truncation of a value to the nearest multiple of a second
+     * value not greater than the first value.
      *
      * @throws Exception The the test cannot be executed.
      */
@@ -191,8 +194,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the truncation of a value to the nearest (not greater) multiple of another value when
-     * the multiple is an illegal zero value.
+     * Tests the truncation of a value to the nearest (not greater) multiple of
+     * another value when the multiple is an illegal zero value.
      */
     @Test(expected = IllegalArgumentException.class)
     public void testFloorToMultipleIllegalZeroMultiple() {
@@ -200,8 +203,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the rounding of a value to the nearest (not greater) multiple of another value when
-     * the multiple is an illegal negative value.
+     * Tests the rounding of a value to the nearest (not greater) multiple of
+     * another value when the multiple is an illegal negative value.
      */
     @Test(expected = IllegalArgumentException.class)
     public void testFloorToMultipleIllegalNegativeMultiple() {
@@ -209,8 +212,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the rounding up of a value to the nearest multiple of a second value not less than
-     * the first value.
+     * Tests the rounding up of a value to the nearest multiple of a second
+     * value not less than the first value.
      *
      * @throws Exception The the test cannot be executed.
      */
@@ -289,8 +292,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the truncation of a value to the nearest (not lesser) multiple of another value when
-     * the multiple is an illegal zero value.
+     * Tests the truncation of a value to the nearest (not lesser) multiple of
+     * another value when the multiple is an illegal zero value.
      */
     @Test(expected = IllegalArgumentException.class)
     public void testCeilToMultipleIllegalZeroMultiple() {
@@ -298,8 +301,8 @@ public class WCAMathTestCase {
     }
 
     /**
-     * Tests the rounding of a value to the nearest (not lesser) multiple of another value when
-     * the multiple is an illegal negative value.
+     * Tests the rounding of a value to the nearest (not lesser) multiple of
+     * another value when the multiple is an illegal negative value.
      */
     @Test(expected = IllegalArgumentException.class)
     public void testCeilToMultipleIllegalNegativeMultiple() {
@@ -313,7 +316,7 @@ public class WCAMathTestCase {
      */
     @Test
     public void testRoundResult() throws Exception {
-        // Values under 10 minutes are truncated to the nearest (not greater) 1/100 s.
+        // Values < 10 mins are truncated to the nearest (not greater) 1/100 s.
         assertEquals(0, roundResult(9));
         assertEquals(10, roundResult(10));
         assertEquals(10, roundResult(15));
@@ -328,7 +331,7 @@ public class WCAMathTestCase {
         assertEquals(21_990, roundResult(21_999));
         assertEquals(599_990, roundResult(599_999)); // *Almost* 10 minutes.
 
-        // Values over 10 minutes are rounded to the nearest second (half-up rounding).
+        // Values >= 10 mins are rounded (half-up) to the nearest second.
         assertEquals(600_000, roundResult(600_499));
         assertEquals(601_000, roundResult(600_500));
         assertEquals(601_000, roundResult(600_999));
@@ -346,14 +349,16 @@ public class WCAMathTestCase {
      */
     @Test
     public void testGetRoundingMultiple() throws Exception {
-        // Times with a *magnitude* < 10 minutes are rounded/truncated to a multiple of 10 ms.
+        // Times with a *magnitude* < 10 minutes are rounded/truncated to a
+        // multiple of 10 ms.
         assertEquals(10, getRoundingMultiple( 599_999));
         assertEquals(10, getRoundingMultiple(       1));
         assertEquals(10, getRoundingMultiple(       0));
         assertEquals(10, getRoundingMultiple(      -1));
         assertEquals(10, getRoundingMultiple(-599_999));
 
-        // Times with a *magnitude* >= 10 minutes are rounded/truncated to a multiple of 1,000 ms.
+        // Times with a *magnitude* >= 10 minutes are rounded/truncated to a
+        // multiple of 1,000 ms.
         assertEquals(1_000, getRoundingMultiple( 600_001));
         assertEquals(1_000, getRoundingMultiple( 600_000));
         assertEquals(1_000, getRoundingMultiple(-600_000));

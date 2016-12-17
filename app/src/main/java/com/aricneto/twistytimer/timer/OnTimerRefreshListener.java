@@ -13,8 +13,8 @@ package com.aricneto.twistytimer.timer;
  *
  * @author damo
  */
-// Only used for now by "TimerWidget", which is in the same package, but
-// "public" access allows for other implementation elsewhere if ever needed.
+// Only used for now by "TimerView", which is in the same package, but "public"
+// access allows for other view implementations in other packages if needed.
 @SuppressWarnings("WeakerAccess")
 public interface OnTimerRefreshListener {
     /**

@@ -1,6 +1,5 @@
 package com.aricneto.twistytimer.fragment;
 
-
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -44,8 +43,8 @@ import com.afollestad.materialdialogs.MaterialDialog;
 import com.aricneto.twistify.R;
 import com.aricneto.twistytimer.TwistyTimer;
 import com.aricneto.twistytimer.activity.MainActivity;
-import com.aricneto.twistytimer.database.DatabaseHandler;
 import com.aricneto.twistytimer.items.Penalties;
+import com.aricneto.twistytimer.items.Penalty;
 import com.aricneto.twistytimer.items.PuzzleType;
 import com.aricneto.twistytimer.items.Solve;
 import com.aricneto.twistytimer.listener.OnBackPressedInFragmentListener;
@@ -60,10 +59,10 @@ import com.aricneto.twistytimer.stats.StatisticsCache;
 import com.aricneto.twistytimer.timer.OnTimerEventListener;
 import com.aricneto.twistytimer.timer.OnTimerEventLogger;
 import com.aricneto.twistytimer.timer.PuzzleTimer;
-import com.aricneto.twistytimer.timer.SolveAttemptHandler;
+import com.aricneto.twistytimer.timer.SolveHandler;
 import com.aricneto.twistytimer.timer.TimerCue;
 import com.aricneto.twistytimer.timer.TimerState;
-import com.aricneto.twistytimer.timer.TimerWidget;
+import com.aricneto.twistytimer.timer.TimerView;
 import com.aricneto.twistytimer.utils.LoggingLoaderCallbacks;
 import com.aricneto.twistytimer.utils.MainState;
 import com.aricneto.twistytimer.utils.Prefs;
@@ -84,7 +83,7 @@ import static com.aricneto.twistytimer.utils.TimeUtils.formatTimeStatistic;
 public class TimerFragment extends BaseMainFragment
         implements OnBackPressedInFragmentListener,
                    StatisticsCache.StatisticsObserver,
-                   OnTimerEventListener, SolveAttemptHandler {
+                   OnTimerEventListener, SolveHandler {
     /**
      * Flag to enable debug logging for this class.
      */
@@ -103,17 +102,17 @@ public class TimerFragment extends BaseMainFragment
         = TimerFragment.class.getName() + '.';
 
     /**
-     * The key used to identify the saved instance state of the fragment
-     * state field.
-     */
-    private static final String KEY_FRAGMENT_STATE
-        = KEY_PREFIX + "fragmentState";
-
-    /**
      * The key used to identify the saved instance state of the puzzle timer.
      */
     private static final String KEY_PUZZLE_TIMER_STATE
         = KEY_PREFIX + "puzzleTimer";
+
+    /**
+     * A view tag used on the "+/-DNF" button to indicate if a DNF should be
+     * annulled or incurred when the button is clicked. If this tag is present,
+     * the button action should annul a DNF; if not present, incur a DNF.
+     */
+    private static final Object ANNUL_DNF = new Object();
 
     // NOTE: There are an awful lot of views, so it will be easier to tell
     // them apart from all of the other fields by prefixing them with "mv"
@@ -126,7 +125,7 @@ public class TimerFragment extends BaseMainFragment
 
     // The main time display and the larger view that reacts to touches to
     // start/stop the timer.
-    @BindView(R.id.timer)             TimerWidget mvTimerWidget;
+    @BindView(R.id.timer)             TimerView   mvTimerView;
     @BindView(R.id.timer_touch_proxy) View        mvTimerTouchProxy;
 
     // The scramble text, image and big expanded image (shown when the small
@@ -140,10 +139,10 @@ public class TimerFragment extends BaseMainFragment
     // The panel showing the hints for the cross and X-cross. The panel is
     // revealed using a sliding layout.
     @BindView(R.id.sliding_layout)    SlidingUpPanelLayout mvCrossHintsSlider;
-    @BindView(R.id.cross_hints_panel) View                 mvCrossHintsPanel;
-    @BindView(R.id.hintText)          TextView             mvCrossHintsText;
-    @BindView(R.id.hintProgress)      View                 mvCrossHintsProgress;
-    @BindView(R.id.hintProgressText)  TextView             mvCrossHintsProgressText;
+    @BindView(R.id.cross_hints_panel) View          mvCrossHintsPanel;
+    @BindView(R.id.hintText)          TextView      mvCrossHintsText;
+    @BindView(R.id.hintProgress)      View          mvCrossHintsProgress;
+    @BindView(R.id.hintProgressText)  TextView      mvCrossHintsProgressText;
 
     // The quick action buttons and other decorations shown after a solve
     // time is recorded.
@@ -157,152 +156,6 @@ public class TimerFragment extends BaseMainFragment
     @BindView(R.id.congrats_text)        TextView         mvCongratsText;
 
     /**
-     * An enumeration of the different states of this fragment.
-     */
-    private enum State {
-
-        // FIXME: Probably only need three states, as "onTimerSet" is notified
-        // at key points an can be used to set up the UI appropriately. Either
-        // the timer is running, or it is not. If it is not running, then either
-        // there is a solve that can be edited, or there is not. All of this
-        // can probably be determined from the timer state, so is this enum
-        // needed at all?
-        //
-        // FIXME: IMPORTANT: Not having to deal with this separate state field
-        // would make things easier, as there would be no way for the state of
-        // the timer to be inconsistent with the state of the fragment.
-
-        /**
-         * There is no current solve available to be edited and the timer is
-         * stopped. The timer must be in its reset state and showing "0.00"
-         * (or similar).
-         */
-        NO_SOLVE,
-
-        /**
-         * The user has started to interact with the timer and the timer
-         * <i>may</i> start soon. The timer is still stopped, but should
-         * present the appearance of being ready to start by showing (and
-         * holding) either the inspection time or the "0.00" solve time (if
-         * inspection is disabled). However, the timer will not yet be
-         * presented "full-screen". If the start is aborted (e.g., if there
-         * is a hold-to-start action and the "hold" is for too short a
-         * duration), then the state will return to {@link #NO_SOLVE} or
-         * {@link #SOLVE_IN_EDIT}, whichever is appropriate. This state may
-         * be skipped if the hold-to-start behaviour is not enabled for the
-         * solve timer, or if there is an inspection period before starting
-         * the solve timer (as there is no hold-to-start action before
-         * inspection).
-         */
-        TIMER_PENDING,
-
-        /**
-         * The user has interacted with the timer and the timer <i>will</i>
-         * start soon. The timer is still stopped, but should present the
-         * appearance of being ready to start by showing (and holding) either
-         * the inspection time or the "0.00" solve time (if inspection is
-         * disabled). Any hold-to-start period that was pending completion
-         * The next user action will (almost certainly) start the timer
-         *
-         * If the start is aborted (e.g., if there is a
-         * hold-to-start action and the "hold" is for too short a duration), then the state will
-         * return to {@link #NO_SOLVE} or {@link #SOLVE_IN_EDIT}, whichever is appropriate.
-         */
-        TIMER_READY,
-
-        /**
-         * The timer is running. The timer is running when the inspection
-         * countdown starts, or, if inspection is not enabled, when the solve
-         * timer starts. It ceases running if the inspection countdown times
-         * out, the solve timer is stopped, or the user cancels the solve
-         * attempt (usually with the "Back" button). The next state will be
-         * {@link #NO_SOLVE} if the timer was cancelled and there was no
-         * previous solve to restore, or will be {@link #SOLVE_IN_EDIT} if
-         * there is a new solve reported, or if the timer is cancelled and
-         * the previous solve restored.
-         */
-        // FIXME: Is there any need for a separation of "TIMER_READY" and
-        // "TIMER_RUNNING"?
-        TIMER_RUNNING,
-
-        /**
-         * There is a current solve available and edit controls can be
-         * presented. The timer is stopped. If the timer was cancelled after
-         * it was started, this will be the same solve that was "in edit"
-         * before the timer was started. If the timer ran to completion, this
-         * will be a new solve. In either case, the solve will already have
-         * been saved to the database. If the solve is deleted, the state
-         * will transition to {@link #NO_SOLVE}. If the user starts to
-         * interact with the timer, the state will transition to
-         * {@link #TIMER_PENDING}.
-         */
-        SOLVE_IN_EDIT;
-
-        // FIXME: What about the brief period between stopping the timer and
-        // waiting for the DB operation to complete? Would it be better,
-        // perhaps, to let that remain synchronous until the new, first-draft
-        // FSM layer is bedded in?
-
-        /**
-         * <p>
-         * Indicates if the timer is in an "active" state. In an "active"
-         * state, the user is interacting with the timer and it is in a state
-         * that can be cancelled. If cancelled, it will return to an inactive
-         * state. This may be used to determine if a "Back" button press
-         * event should be consumed to cancel the timer. If not active, such
-         * an event should be passed to a different component or ignored.
-         * </p>
-         * <p>
-         * When active, the timer is not necessarily running or being shown
-         * full-screen. To test if the timer is running, simply check if the
-         * state is {@link #TIMER_RUNNING}. To test if the timer is being
-         * shown full-screen, see {@link #isTimerDominant()}.
-         * </p>
-         *
-         * @return
-         *     {@code true} if the timer is active; or {@code false} if it is
-         *     inactive.
-         */
-        public boolean isTimerActive() {
-            return this == TIMER_PENDING
-                   || this == TIMER_READY
-                   || this == TIMER_RUNNING;
-        }
-
-        /**
-         * <p>
-         * Indicates if the timer is the dominant user-interface element.
-         * While the timer is dominant (or "full screen"), defer updates to
-         * other user-interface elements, so that they do not intrude on the
-         * dominant presentation of the timer.
-         * </p>
-         * <p>
-         * For example, when the timer is running, it will be dominant. If
-         * the scramble generator has been running in the background and
-         * completes its task, it must not intrude on the timer by displaying
-         * its scramble sequence and scramble image. Instead, these should be
-         * displayed when the timer is no longer dominant, i.e., when it is
-         * stopped or cancelled.
-         * </p>
-         *
-         * @return
-         *     {@code true} if the timer is dominant (or "full screen");
-         *     or {@code false} if
-         */
-        public boolean isTimerDominant() {
-            return this == TIMER_READY || this == TIMER_RUNNING;
-        }
-    }
-
-    /**
-     * The current "state" of this fragment's finite-state machine that it
-     * uses to track the current state of the user interface and the
-     * currently-presented solve.
-     */
-    // NOTE: Persisted as part of the instance state of this fragment.
-    private State mState = State.NO_SOLVE;
-
-    /**
      * The puzzle timer that manages the inspection countdown and solve
      * timing. This timer object does not have any user interface; it
      * notifies this fragment via call-back methods when the user interface
@@ -310,6 +163,12 @@ public class TimerFragment extends BaseMainFragment
      */
     // NOTE: Persisted as part of the instance state of this fragment.
     private PuzzleTimer mTimer;
+
+    /**
+     * The database ID of the {@code Solve} that was last verified to still
+     * exist in the database.
+     */
+    private long mVerifiedSolveID = Solve.NO_ID;
 
     // Locks the chronometer so it cannot start before a scramble sequence is
     // generated (if one is being generated), or so it does not respond to
@@ -321,7 +180,7 @@ public class TimerFragment extends BaseMainFragment
     /**
      * The next available scramble that has been generated, but has not yet
      * been solved. This is updated each time a new scramble is generated.
-     * When the timer starts, this is moved to {@link #mActiveSolve}
+     * When the timer starts, this is moved to the active solve instance,
      * (allowing it to be saved when the timer stops) and generation of a new
      * scramble begins in the background that will update this field before
      * the next solve. The scramble data also records the puzzle type for
@@ -348,13 +207,19 @@ public class TimerFragment extends BaseMainFragment
      */
     private Statistics mRecentStatistics;
 
+    /**
+     * The receiver for broadcast notifications about interactions with, or
+     * changes to the state of, the user interface. Specifically, interactions
+     * with elements of the UI that are managed by {@link TimerMainFragment}
+     * can be identified by this fragment and acted upon as necessary.
+     */
     private final TTFragmentBroadcastReceiver mUIInteractionReceiver
             = new TTFragmentBroadcastReceiver(this, CATEGORY_UI_INTERACTIONS) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
             switch (intent.getAction()) {
                 case ACTION_TOOLBAR_RESTORED:
-                    showItems(mState == State.SOLVE_IN_EDIT);
+                    showItems();
                     mIsRestoringToolBar = false;
                     break;
 
@@ -369,6 +234,171 @@ public class TimerFragment extends BaseMainFragment
         }
     };
 
+    /**
+     * <p>
+     * The receiver for broadcast notifications that describe changes to the
+     * solve time data in the database.
+     * </p>
+     * <p>
+     * This timer fragment displays the result of the last solve attempt and
+     * provides quick action buttons to allow basic changes to, or deletion
+     * of, the corresponding saved {@code Solve}. If the source of a change
+     * (identified by an intent extra that holds the source class) is
+     * <i>not</i> this timer fragment class, then the display of the last solve
+     * attempt will be reset to ensure that no further edits are possible and
+     * that out-of-date solve data is not presented.
+     * </p>
+     */
+    private final TTFragmentBroadcastReceiver mSolveDataChangedReceiver
+        = new TTFragmentBroadcastReceiver(this, CATEGORY_SOLVE_DATA_CHANGES) {
+        @Override
+        public void onReceiveWhileAdded(Context context, Intent intent) {
+            // Validation ensures that where an intent action expects a "Solve"
+            // instance or solve ID that one will be present, or an exception
+            // will be thrown. Null-checks can then be skipped in the "case"
+            // statements later.
+            TTIntent.validate(intent);
+
+            final Solve intentSolve = TTIntent.getSolve(intent);
+            final long intentSolveID = intentSolve != null
+                ? intentSolve.getID() : TTIntent.getSolveID(intent);
+
+            // This receiver is not registered until after "mTimer" is set,
+            // so "mTimer" will not be null.
+            final Solve timerSolve = mTimer.getTimerState().getSolve();
+            final long timerSolveID = timerSolve != null
+                ? timerSolve.getID() : Solve.NO_ID;
+
+            // IMPORTANT: The general approach here is to check if the timer is
+            // "stopped" (which does not include being "reset") and then update
+            // the timer to reflect any changes to the solve that it is
+            // managing. If the timer is reset, then it is not managing any
+            // solve, so changes to the solve data in the database cannot have
+            // any effect on the timer. If the timer is running, then the solve
+            // it is managing has yet to be saved, so changes to the solves
+            // saved in the database cannot have any effect on the timer.
+            //    *ALL* changes affecting the timer state or the UI state are
+            // applied by calling "PuzzleTimer.onSolveChanged(Solve)" or
+            // "PuzzleTimer.reset()". These will cause "onTimerSet(TimerState)"
+            // to be called back on this fragment and the changes will be
+            // applied to the UI there and only there.
+            //    If the timer is running, it might be cancelled and then roll
+            // back to the "previous" solve result. However, until the result
+            // is rolled back, no action is taken to verify if changes to the
+            // solves in the database affect that "previous" solve. After the
+            // roll-back, "onTimerSet" will be called and a verification task
+            // will be initiated to ensure that the "previous" solve still
+            // exists and that its details are up-to-date. This keeps things
+            // nice and simple: only the current solve is ever verified and
+            // that is only necessary if the timer is stopped. The only caveat
+            // is that "mValidatedSolveID" needs to be cleared in cases where
+            // it might record the ID of the "previous" solve. If it were not
+            // cleared, then "onTimerSet" would not trigger the necessary
+            // verification task if the running solve attempt were cancelled
+            // and rolled back to the "previous" solve result. The simplest
+            // approach is to clear "mValidatedSolveID" in "onSolveStart()",
+            // as that method is called each time a new solve attempt starts
+            // and each time a roll-back could potentially follow.
+
+            if (!mTimer.getTimerState().isStopped() || timerSolve == null) {
+                // If the timer is not "stopped", then it has no current solve
+                // that could match any solve in the database, so changes to
+                // the data cannot affect the timer state. Do nothing.
+                return;
+            }
+
+            switch (intent.getAction()) {
+                case ACTION_SOLVE_VERIFIED:
+                case ACTION_ONE_SOLVE_UPDATED:
+                    // If the solve that passed verification or has been updated
+                    // is the one that is currently being managed by the timer,
+                    // then record that is has been verified and update it with
+                    // the intent solve (which was just re-read from, or written
+                    // to, the database and is sure to be up-to-date). This will
+                    // trigger a call-back to "onTimerSet".
+                    if (timerSolveID == intentSolveID) {
+                        mVerifiedSolveID = intentSolveID;
+                        //noinspection ConstantConditions (validated above)
+                        mTimer.onSolveChanged(intentSolve);
+                    }
+                    break;
+
+                case ACTION_SOLVE_NOT_VERIFIED:
+                case ACTION_ONE_SOLVE_DELETED:
+                    // If the solve that failed verification or was deleted is
+                    // the one that is currently being managed by the timer,
+                    // then reset the timer (which will call back to
+                    // "onTimerSet()").
+                    if (timerSolveID == intentSolveID) {
+                        mVerifiedSolveID = Solve.NO_ID;
+                        mTimer.reset();
+                    }
+                    break;
+
+                case ACTION_ONE_SOLVE_ADDED:
+                    // If the timer is stopped, but its solve has no ID, then
+                    // it is waiting for that solve to be saved and assigned
+                    // its ID. Replace the solve in the timer with the saved
+                    // solve that has its newly assigned solve ID. As the
+                    // intent solve has just been saved to the database,
+                    // consider it "verified" by default.
+                    //    If a solve is added manually, it could be confused
+                    // with a solve being managed by the timer that is awaiting
+                    // a save. However, that is not likely given the way the UI
+                    // works and the serial processing of database writes. At
+                    // worst, the timer will show the manually-added solve as
+                    // its latest result, which will work just fine. The solve
+                    // that the timer was saving will be saved as normal, just
+                    // not shown afterwards, as the timer's solve now has an
+                    // ID other than "NO_ID".
+                    //    The likelihood of confusion with a manually-added
+                    // solve can be reduced by checking that the solve has the
+                    // same puzzle type and solve category as the timer's solve.
+                    // However this is unlikely to be different and would not
+                    // really matter, anyway, so do not bother to check it.
+                    if (timerSolveID == Solve.NO_ID) {
+                        mVerifiedSolveID = intentSolveID;
+                        //noinspection ConstantConditions (validated above)
+                        mTimer.onSolveChanged(intentSolve);
+                    }
+                    break;
+
+                case ACTION_MANY_SOLVES_ADDED:
+                    // Nothing to do. Adding other new solves does not affect
+                    // any result being displayed by the timer.
+                    break;
+
+                case ACTION_MANY_SOLVES_DELETED:
+                case ACTION_SOLVES_MOVED_TO_HISTORY:
+                    // It is not known whether or not the solve currently being
+                    // managed by the timer was deleted or moved to the history.
+                    // Just re-verify the current solve to find out. Clear
+                    // "mVerifiedSolveID" and update the current solve with
+                    // itself, which will trigger a call-back to "onTimerSet()"
+                    // which will, in turn, disable the editing controls until
+                    // the result of the verification task is broadcast back to
+                    // this receiver.
+                    //    If the timer's solve was deleted, then the timer will
+                    // be reset when "ACTION_SOLVE_NOT_VERIFIED" is received.
+                    //    If the timer's solve was moved to the history, then
+                    // the change to the "history" flag will be applied to the
+                    // solve held by the timer when "ACTION_SOLVE_VERIFIED" is
+                    // received. This ensures that any subsequent edits will
+                    // not lose the change to the "history" flag when they
+                    // update the database record based on edits applied to the
+                    // "Solve" instance held by the timer.
+                    //    If the intent extras define a puzzle type and solve
+                    // category that do not match those properties of the
+                    // timer's solve instance, then this re-verification would
+                    // not be necessary. However, it is simpler not to bother
+                    // checking for a match, as a match is likely in most cases,
+                    // given the way the UI works.
+                    mVerifiedSolveID = Solve.NO_ID;
+                    mTimer.onSolveChanged(timerSolve);
+                    break;
+            }
+        }
+    };
     public TimerFragment() {
         // Required empty public constructor
     }
@@ -403,108 +433,44 @@ public class TimerFragment extends BaseMainFragment
 
         mUnbinder = ButterKnife.bind(this, root); // Unbound in "onDestroyView".
 
-        final View.OnClickListener buttonClickListener
-            = new View.OnClickListener() {
+        mvDeleteButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view) {
-                final DatabaseHandler dbHandler = TwistyTimer.getDBHandler();
-                final MainState mainState = getMainState();
-                final TimerState timerState = mTimer.getTimerState();
+            public void onClick(View v) {
+                deleteSolve();
+            }
+        });
 
-                // On most of these edits to the current solve, the
-                // Statistics and ChartStatistics need to be updated to
-                // reflect the change. It would probably be too complicated
-                // to add facilities to "AverageCalculator" to handle
-                // modification of the last added time or an "undo" facility
-                // and then to integrate that into the loaders. Therefore, a
-                // full reload will probably be required.
-
-                // FIXME: What if the solve is deleted from the
-                // "TimerListFragment"? It will also need to be deleted here,
-                // otherwise the updates will fail.
-
-                switch (view.getId()) {
-                    case R.id.button_delete:
-                        new MaterialDialog.Builder(getContext())
-                                .content(R.string.delete_dialog_confirmation_title)
-                                .positiveText(R.string.delete_dialog_confirmation_button)
-                                .negativeText(R.string.delete_dialog_cancel_button)
-                                .onPositive(new MaterialDialog.SingleButtonCallback() {
-                                    @Override
-                                    public void onClick(@NonNull MaterialDialog dialog,
-                                                        @NonNull DialogAction which) {
-                                        mTimer.reset(); // Reset to "0.00".
-                                        mvCongratsText.setVisibility(View.GONE);
-                                        dbHandler.deleteSolveAndNotifyAsync(mSavedSolve, mainState);
-                                        hideQuickActionButtons(); // Deleted, so nothing to edit.
-                                    }
-                                })
-                                .show();
-                        break;
-
-                    case R.id.button_dnf:
-    //                    if (mTimer.getTimerState().incurPostStartPenalty(Penalty.DNF)) {
-    //                        mSavedSolve.applyPenalty(Penalty.DNF);
-    //                        dbHandler.updateSolveAndNotifyAsync(mSavedSolve, mainState);
-    //                        showQuickActionButtons(mSavedSolve);
-    //                    }
-                        break;
-
-                    case R.id.button_plus_two:
-                        // Do not allow a second "+2" to be added. (TODO: In reality, multiple "+2"
-                        // penalties could be incurred and should accumulate.)
-    //                    if (mCurrentPenalty != Penalty.PLUS_TWO) {
-    //                        mTimer.getTimerState().incurPostStartPenalty(Penalty.PLUS_TWO);
-    //                        mSavedSolve.applyPenalty(Penalty.PLUS_TWO);
-    //                        dbHandler.updateSolveAndNotifyAsync(mSavedSolve, mainState);
-    //                        showQuickActionButtons(mSavedSolve);
-    //                    }
-                        break;
-
-                    case R.id.button_comment:
-                        MaterialDialog dialog = new MaterialDialog.Builder(getContext())
-                                .title(R.string.add_comment)
-                                .input("", "", new MaterialDialog.InputCallback() {
-                                    @Override
-                                    public void onInput(@NonNull MaterialDialog dialog,
-                                                        CharSequence input) {
-                                        mSavedSolve.setComment(input.toString());
-                                        dbHandler.updateSolveAndNotifyAsync(
-                                                mSavedSolve, mainState);
-                                        Toast.makeText(getContext(),
-                                                getString(R.string.added_comment),
-                                                Toast.LENGTH_SHORT).show();
-                                        showQuickActionButtons(mSavedSolve);
-                                    }
-                                })
-                                .inputType(InputType.TYPE_TEXT_FLAG_MULTI_LINE)
-                                .positiveText(R.string.action_done)
-                                .negativeText(R.string.action_cancel)
-                                .build();
-
-                        final EditText editText = dialog.getInputEditText();
-
-                        if (editText != null) {
-                            editText.setSingleLine(false);
-                            editText.setLines(3);
-                            editText.setImeOptions(EditorInfo.IME_FLAG_NO_ENTER_ACTION);
-                            editText.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-                        }
-
-                        dialog.show();
-                        break;
-
-                    case R.id.cross_hints_panel:
-                        break;
+        mvDNFButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (v.getTag() == ANNUL_DNF) {
+                    annulPostStartPenalty(Penalty.DNF);
+                } else {
+                    incurPostStartPenalty(Penalty.DNF);
                 }
             }
-        };
+        });
 
-        mvDeleteButton.setOnClickListener(buttonClickListener);
-        mvDNFButton.setOnClickListener(buttonClickListener);
-        mvPlusTwoButton.setOnClickListener(buttonClickListener);
-        mvMinusTwoButton.setOnClickListener(buttonClickListener);
-        mvCommentButton.setOnClickListener(buttonClickListener);
+        mvPlusTwoButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                incurPostStartPenalty(Penalty.PLUS_TWO);
+            }
+        });
+
+        mvMinusTwoButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                annulPostStartPenalty(Penalty.PLUS_TWO);
+            }
+        });
+
+        mvCommentButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editSolveComment();
+            }
+        });
 
         mvCrossHintsPanel.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -541,9 +507,9 @@ public class TimerFragment extends BaseMainFragment
             }
         });
 
-        // Relay (filtered) touch events from the "proxy" that accepts
-        // touches through to the "PuzzleTimer" (not a view). The
-        // "TimerWidget" view itself is not touch sensitive.
+        // Relay (filtered) touch events from the "proxy" that accepts touches
+        // through to the "PuzzleTimer" (not a view). The "TimerView" itself is
+        // not touch-sensitive.
         final float touchMargin
             = getResources().getDimension(R.dimen.timer_touch_proxy_margin);
 
@@ -551,22 +517,20 @@ public class TimerFragment extends BaseMainFragment
             @Override
             public boolean onTouch(View view, MotionEvent motionEvent) {
                 if (mIsGeneratingScramble || mIsRestoringToolBar) {
-                    // Not ready to start the timer, yet. May be waiting on
-                    // the animation of the restoration of the tool-bars
-                    // after the timer was stopped, or waiting on the
-                    // generation of a scramble ("mIsGeneratingScramble"
-                    // flag). In these states, the timer cannot be running or
-                    // counting down, so touches should be ignored.
+                    // Not ready to start the timer, yet. May be waiting on the
+                    // animation of the restoration of the tool-bars after the
+                    // timer was stopped, or waiting on the generation of a
+                    // scramble ("mIsGeneratingScramble" flag). In these states,
+                    // the timer cannot be running or counting down, so touches
+                    // should be ignored.
                     return false;
                 }
 
-                // When the timer is not running, ignore touches along the
-                // left margin of the view, as the user is probably trying to
-                // open the side drawer menu. Otherwise, pass on those
-                // touches, so there is no "dead zone" when trying to stop
-                // the timer.
-                if (mState != State.TIMER_RUNNING
-                    && motionEvent.getX() <= touchMargin) {
+                // When the timer is not "busy", ignore touches along the left
+                // margin of the view, as the user is probably trying to open
+                // the side drawer menu. Otherwise, pass on those touches, so
+                // there is no "dead zone" when trying to stop the timer.
+                if (motionEvent.getX() <= touchMargin && !isTimerBusy()) {
                     return false;
                 }
 
@@ -584,12 +548,11 @@ public class TimerFragment extends BaseMainFragment
                         return true;
 
                     case MotionEvent.ACTION_CANCEL:
-                        // The parent view has intercepted the recent
-                        // sequence of touch events and has cancelled the
-                        // touches for this view. Most likely, a "ViewPager"
-                        // has interpreted the touches as a "swipe" gesture
-                        // that it will respond to by changing the current
-                        // page (or tab).
+                        // The parent view has intercepted the recent sequence
+                        // of touch events and has cancelled the touches for
+                        // this view. Most likely, a "ViewPager" has interpreted
+                        // the touches as a "swipe" gesture that it will respond
+                        // to by changing the current page (or tab).
                         //
                         // "ACTION_CANCEL" is similar to "ACTION_UP", but the
                         // normal operation performed for an
@@ -612,6 +575,151 @@ public class TimerFragment extends BaseMainFragment
         });
 
         return root;
+    }
+
+    private void incurPostStartPenalty(@NonNull Penalty penalty) {
+        if (mTimer == null || !mTimer.getTimerState().isStopped()) {
+            // Unlikely, as a button has probably just been pressed and buttons
+            // are only shown when the timer is stopped. Still, be careful.
+            return;
+        }
+
+        final Solve oldSolve = mTimer.getTimerState().getSolve();
+
+        if (oldSolve != null) {
+            final Penalties oldPenalties = oldSolve.getPenalties();
+            final Penalties newPenalties
+                = oldPenalties.incurPostStartPenalty(penalty);
+
+            if (!newPenalties.equals(oldPenalties)) {
+                final Solve newSolve = oldSolve.withPenalties(newPenalties);
+
+                // Disable the quick action buttons while the background task
+                // is running; they will still be shown (and will reflect the
+                // newly-incurred penalty), but they will not allow concurrent
+                // edits.
+                //
+                // "mVerifiedSolveID" is also reset, as that previously-verified
+                // solve (if set) is about to change, so if "onTimerSet" is
+                // called (for some reason), it will not re-enable the quick
+                // action buttons until it runs a verification, which will pick
+                // up the details of the updated solve.
+                //
+                // The task broadcasts "ACTION_ONE_SOLVE_UPDATED" when done.
+                // When that action is received, the timer will be notified via
+                // "onSolveChanged()" and it can then record the newly-updated
+                // "Solve" and call back "onTimerSet()". "onTimerSet()" will
+                // updated the timer display and the state of the quick-action
+                // buttons.
+                mVerifiedSolveID = Solve.NO_ID;
+                showQuickActionButtons(newSolve, false); // Show but disable.
+                TwistyTimer.getDBHandler().updateSolveAndNotifyAsync(newSolve);
+            }
+        }
+    }
+
+    private void annulPostStartPenalty(@NonNull Penalty penalty) {
+        // NOTE: See comments in "incurPostStartPenalty(Penalty)" for details.
+        if (mTimer == null || !mTimer.getTimerState().isStopped()) {
+            return;
+        }
+
+        final Solve oldSolve = mTimer.getTimerState().getSolve();
+
+        if (oldSolve != null) {
+            final Penalties oldPenalties = oldSolve.getPenalties();
+            final Penalties newPenalties
+                = oldPenalties.annulPostStartPenalty(penalty);
+
+            if (!newPenalties.equals(oldPenalties)) {
+                final Solve newSolve = oldSolve.withPenalties(newPenalties);
+
+                mVerifiedSolveID = Solve.NO_ID;
+                // Show but disable.
+                TwistyTimer.getDBHandler().updateSolveAndNotifyAsync(newSolve);
+            }
+        }
+    }
+
+    private void deleteSolve() {
+        // NOTE: See comments in "incurPostStartPenalty(Penalty)" for details.
+        if (mTimer == null || !mTimer.getTimerState().isStopped()) {
+            return;
+        }
+
+        final Solve oldSolve = mTimer.getTimerState().getSolve();
+
+        if (oldSolve != null) {
+            new MaterialDialog.Builder(getContext())
+                .content(R.string.delete_dialog_confirmation_title)
+                .positiveText(R.string.delete_dialog_confirmation_button)
+                .negativeText(R.string.delete_dialog_cancel_button)
+                .onPositive(new MaterialDialog.SingleButtonCallback() {
+                    @Override
+                    public void onClick(@NonNull MaterialDialog dialog,
+                                        @NonNull DialogAction which) {
+                        mVerifiedSolveID = Solve.NO_ID;
+                        showQuickActionButtons(oldSolve, false);
+                        TwistyTimer.getDBHandler()
+                                   .deleteSolveAndNotifyAsync(oldSolve);
+                    }
+                })
+                .show();
+        }
+    }
+
+    private void editSolveComment() {
+        // NOTE: See comments in "incurPostStartPenalty(Penalty)" for details.
+        if (mTimer == null || !mTimer.getTimerState().isStopped()) {
+            return;
+        }
+
+        final Solve oldSolve = mTimer.getTimerState().getSolve();
+
+        if (oldSolve != null) {
+            MaterialDialog dialog = new MaterialDialog.Builder(getContext())
+                .title(R.string.add_comment)
+                .input("", "", new MaterialDialog.InputCallback() {
+                    @Override
+                    public void onInput(@NonNull MaterialDialog dialog,
+                                        CharSequence input) {
+                        final Solve newSolve
+                            = oldSolve.withComment(input.toString());
+
+                        if (!newSolve.equals(oldSolve)) {
+                            mVerifiedSolveID = Solve.NO_ID;
+                            showQuickActionButtons(newSolve, false);
+                            TwistyTimer.getDBHandler()
+                                       .updateSolveAndNotifyAsync(newSolve);
+
+                            // This is from the old implementation. While the
+                            // comment will be added on a background task, just
+                            // assume it will succeed and notify the user that
+                            // the comment has been added, as there will be no
+                            // other visual indication of the change, unlike
+                            // when penalties are added, or a solve is deleted.
+                            Toast.makeText(getContext(),
+                                getString(R.string.added_comment),
+                                Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .inputType(InputType.TYPE_TEXT_FLAG_MULTI_LINE)
+                .positiveText(R.string.action_done)
+                .negativeText(R.string.action_cancel)
+                .build();
+
+            final EditText editText = dialog.getInputEditText();
+
+            if (editText != null) {
+                editText.setSingleLine(false);
+                editText.setLines(3);
+                editText.setImeOptions(EditorInfo.IME_FLAG_NO_ENTER_ACTION);
+                editText.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+            }
+
+            dialog.show();
+        }
     }
 
     @Override
@@ -672,21 +780,18 @@ public class TimerFragment extends BaseMainFragment
 
         // The view has been created, so restore the instance state and link
         // the timer to the UI. From API 17, this could be done in
-        // "onViewStateRestored", but support API 16, for now.
-
+        // "onViewStateRestored", but this needs to support API 16, for now.
+        //
         // Create the puzzle timer. When created, the timer will be in the
         // "sleeping" state. It will call the listeners until after
         // "PuzzleTimer.wake()" is called in "onResume()".
         mTimer = new PuzzleTimer(this);
         if (DEBUG_ME) mTimer.addOnTimerEventListener(new OnTimerEventLogger());
         mTimer.addOnTimerEventListener(this);
-        mTimer.addOnTimerEventListener(mvTimerWidget);
-        mTimer.setOnTimerRefreshListener(mvTimerWidget);
+        mTimer.addOnTimerEventListener(mvTimerView);
+        mTimer.setOnTimerRefreshListener(mvTimerView);
 
         if (savedInstanceState != null) {
-            mState = State.valueOf(
-                savedInstanceState.getString(KEY_FRAGMENT_STATE));
-
             // If the "Parcelable" is "null", "onRestoreInstanceState" will
             // have no effect.
             mTimer.onRestoreInstanceState(
@@ -701,9 +806,9 @@ public class TimerFragment extends BaseMainFragment
         onStatisticsUpdated(StatisticsCache.getInstance().getStatistics());
         StatisticsCache.getInstance().registerObserver(this); // Unregistered in "onDestroyView".
 
-        // Register a receiver to update if something has changed. Unregister
-        // in "onDetach()".
+        // Unregister receivers in "onDetach()".
         registerReceiver(mUIInteractionReceiver);
+        registerReceiver(mSolveDataChangedReceiver);
 
         // Do not generate a scramble now. The loaders may not be ready and
         // listening until after this method returns and the message queue is
@@ -744,7 +849,7 @@ public class TimerFragment extends BaseMainFragment
                 R.string.pk_advanced_timer_settings_enabled,
                 R.bool.default_advanced_timer_settings_enabled)) {
 
-            mvTimerWidget.setDisplayScale(Prefs.getTimerDisplayScale());
+            mvTimerView.setDisplayScale(Prefs.getTimerDisplayScale());
 
             if (Prefs.getBoolean(
                     R.string.pk_large_quick_actions_enabled,
@@ -766,7 +871,7 @@ public class TimerFragment extends BaseMainFragment
                 R.string.pk_timer_text_offset_px,
                 R.integer.default_timer_text_offset_px);
 
-            mvTimerWidget.setTranslationY(-timerTextOffsetPx);
+            mvTimerView.setTranslationY(-timerTextOffsetPx);
             mvQuickActionPanel.setTranslationY(-timerTextOffsetPx);
             mvCongratsText.setTranslationY(-timerTextOffsetPx);
         }
@@ -779,7 +884,7 @@ public class TimerFragment extends BaseMainFragment
         // puzzle types.
         final PuzzleType puzzleType = getMainState().getPuzzleType();
 
-        setUpCrossHints(puzzleType);    // ... also sets the "mShowCrossHints" field.
+        setUpCrossHints(puzzleType);    // ... also sets "mShowCrossHints".
         setUpScrambleImage(puzzleType); // ... if enabled.
 
         if (Prefs.isScrambleEnabled()) {
@@ -853,8 +958,13 @@ public class TimerFragment extends BaseMainFragment
         if (DEBUG_ME) Log.d(TAG, "onSaveInstanceState(" + outState + ')');
         super.onSaveInstanceState(outState);
 
-        outState.putString(KEY_FRAGMENT_STATE,   mState.name()); // Never null.
-
+        // FIXME: An app restart could occur if the device were restarted,
+        // which would invalidate the measurement as the time base, i.e., the
+        // system uptime, would be reset. Therefore, it is probably not
+        // practical to support persisting the timer across app restarts.
+        // However, it will (probably) survive simple cases, such as hitting
+        // "Home" and returning to the app. Persisting the timer state for a
+        // longer period is also viable if the timer is "STOPPED".
         if (mTimer != null) {
             outState.putParcelable(
                 KEY_PUZZLE_TIMER_STATE, mTimer.onSaveInstanceState());
@@ -882,8 +992,8 @@ public class TimerFragment extends BaseMainFragment
         if (DEBUG_ME) Log.d(TAG, "onDetach()");
         super.onDetach();
 
-        // To fix memory leaks
         unregisterReceiver(mUIInteractionReceiver);
+        unregisterReceiver(mSolveDataChangedReceiver);
     }
 
     @Override
@@ -927,13 +1037,17 @@ public class TimerFragment extends BaseMainFragment
     }
 
     @Override
-    public void onTimerCue(@NonNull TimerCue cue,
-                           @NonNull TimerState timerState) {
+    public void onTimerCue(@NonNull TimerCue cue) {
         // IMPORTANT: One or more calls to "onTimerCue()" are always "bracketed"
         // by calls to "onTimerSet", one when the timer is started (or restored)
         // and one when the timer is stopped (or cancelled). The state of the
         // UI is mostly managed from "onTimerSet", but there are a few
         // transitions and other actions that are managed from "onTimerCue".
+
+        // TODO: If adding sound effects, it may be neater to create a separate
+        // sound effects class that implements "OnTimerEventListener" and then
+        // add an instance to the "PuzzleTimer" as another listener for cues.
+        // For an on/off switch: just add/remove that listener.
 
         switch (cue) {
             case CUE_INSPECTION_HOLDING_FOR_START:
@@ -948,14 +1062,15 @@ public class TimerFragment extends BaseMainFragment
                 break;
 
             case CUE_INSPECTION_STARTED:
+            case CUE_INSPECTION_RESUMED:
             case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
             case CUE_INSPECTION_SOLVE_READY_TO_START:
-            case CUE_INSPECTION_STOPPED:
                 break;
 
             case CUE_INSPECTION_7S_REMAINING:
             case CUE_INSPECTION_3S_REMAINING:
-            case CUE_INSPECTION_TIME_OVERRUN:
+            case CUE_INSPECTION_OVERRUN:
+            case CUE_INSPECTION_TIME_OUT:
                 // For now, nothing special is done for these cues (though
                 // the timer display may do something if it wants). Perhaps
                 // play an audible cue. NOTE: If playing audio, it might be
@@ -976,6 +1091,7 @@ public class TimerFragment extends BaseMainFragment
                 // stage, so toast would just be confusing, as the user will
                 // probably not consider a "too-short hold" to be announced as
                 // as, "Timer cancelled!"
+                break;
 
             case CUE_STOPPING:
                 // "onSolveAttemptStop" (if not cancelled) and "onTimerSet"
@@ -985,152 +1101,188 @@ public class TimerFragment extends BaseMainFragment
         }
     }
 
+    /**
+     * <p>
+     * Sets up the user-interface components of this fragment to match the state
+     * of the puzzle timer. If the timer is stopped (not reset), the quick
+     * action buttons that allow the result to be edited (usually to change the
+     * penalties) are shown. If the timer is reset or running, those buttons
+     * are not shown. If the timer is running, the fragment is displayed
+     * "full screen" (in coordination with {@link TimerMainFragment}) and only
+     * the timer display is shown. If not running (i.e., if stopped or reset),
+     * the "full screen" display is reversed.
+     * </p>
+     * <p>
+     * At the instant when the timer is stopped, {@link #onSolveStop(Solve)} is
+     * called to allow the new {@code Solve} result to be saved to the database.
+     * The save operation is performed on a background thread. Therefore, when
+     * this {@code onTimerSet} method is called, the new solve may not yet be
+     * saved and may have no assigned solve record ID. Until the ID is assigned,
+     * the solve cannot be edited, as the ID is needed when updating the solve
+     * record in the database after each edit. Therefore, while the quick-action
+     * buttons are displayed when the timer is stopped, they will not be enabled
+     * until notification is received (by a local broadcast receiver) that the
+     * solve has been saved and has an ID. When that notification is received,
+     * the broadcast receiver will notify the timer that the solve has changed
+     * (it now has an ID), and the timer will store the new solve reference and
+     * call back to this {@code onTimerSet} method. The
+     * </p>
+     * <p>
+     * At any time, the solve managed by the
+     * </p>
+     * <p>
+     * The display of the time value, penalties and final result is the
+     * responsibility of the {@link TimerView}, which is notified of changes
+     * via its implementation of this same call-back method.
+     * </p>
+     *
+     * @param timerState FIXME: Finish this....
+     */
     @Override
     public void onTimerSet(@NonNull TimerState timerState) {
-        // This may be called when the timer has recorded a previous solve
-        // and "onTouchDown()" is called. The call-back allows the timer
-        // widget to be updated to show the "0.00" time of a new timer state
-        // that was "pushed" in readiness for the start of a new solve
-        // attempt. However, the call-back is *not* made if the timer had not
-        // recorded a previous solve.
+        // --------------------------
+        // IF THE TIMER IS STOPPED...
+        // --------------------------
         //
-        // This may also be called after "PuzzleTimer.wake()" is called. It
-        // allows the timer widget to restore the display of the time after a
-        // period of sleep when the time may have changed. In that case,
-        // "onTimerRestored" will be called whether or not it has recorded a
-        // previous solve.
+        // If the timer is stopped (which does not include it being reset),
+        // then display the result of a solve attempt and allow this result to
+        // be edited with the "quick action" buttons. However, the solve must
+        // first be verified to exist in the database. The timer should not be
+        // shown full-screen.
         //
-        // "TimerWidget.showSolve(Solve)" is generally used after
-        // "mSavedSolve" has been recorded. That is the solve that will be
-        // presented. However, if "mActiveSolve" is non-null, then there is
-        // already a new solve attempt under way. (FIXME: Also test mState, I
-        // suppose.)
+        // The solve will not exist in the database if it is in the process of
+        // being saved (by a background task launched from "onSolveStop"), or
+        // if it has been deleted. Until its existence has been verified, the
+        // quick action buttons will be shown as disabled, as editing is unsafe.
         //
-        // FIXME: Should "showSolve" or "onTimerRestored" be called on
-        // "mvTimerWidget"? When call one and not the other? How much state
-        // will "TimerWidget" save and restore itself?
+        // If the solve has no ID, then it is in the process of being saved, so
+        // wait for "ACTION_ONE_SOLVE_ADDED" to be received. In the meantime,
+        // keep the quick action buttons hidden. The timer has just stopped, so
+        // it was not already showing the buttons while it was running. There is
+        // no point in showing the buttons but disabling them; just wait until
+        // the solve is saved and show and enable the buttons at the same time.
         //
-        // IMPORTANT: Avoid the temptation to "push" the instance state into
-        // the "TimerWidget" to restore it. If instance state is passed, then
-        // let the widget restore its own state, which it should also be
-        // responsible for saving.
+        // If the solve has an ID, then it needs to be verified to exist before
+        // the buttons are enabled. In this case, launch a verification task and
+        // wait for "ACTION_SOLVE_VERIFIED" or "ACTION_SOLVE_NOT_VERIFIED" to
+        // be received. Until verified, show the quick action buttons, but keep
+        // then disabled. Hiding the buttons would not be appropriate, as the
+        // buttons are probably already showing and hiding them while the verify
+        // task runs would just appear to make them flicker.
         //
-        // Fragment "onCreate" is passed ...
+        // However, if "mVerifiedSolveID" matches the ID of the solve (and
+        // neither are "Solve.NO_ID"), then verification has already completed,
+        // the solve is known to exist in the database and it can be edited, so
+        // show and enable the quick action buttons.
         //
-        // 1. ... no saved instance state.
+        // ------------------------
+        // IF THE TIMER IS RESET...
+        // ------------------------
         //
-        // 2. ... saved instance state that is an unused timer.
+        // If the timer is reset, then it has no solve to edit, so hide the
+        // quick action buttons. The timer should not be shown full-screen.
+        // Also hide any "Congratulations!" text or other adornments that may
+        // have been showing before the solve was reset. For example, if a
+        // solve is deleted, then the quick action buttons will be disabled
+        // while the delete task is running (because the "mVerifiedSolveID"
+        // will have been set to "Solve.NO_ID" before the task started), and
+        // once that task is complete, the timer will be reset and the buttons
+        // will be hidden.
         //
-        // 3. ... saved instance state that is a stopped (not unused) timer.
+        // --------------------------
+        // IF THE TIMER IS RUNNING...
+        // --------------------------
         //
-        // 4. ... saved instance state that is a running (not unused or stopped) timer.
+        // If the timer is running (per "TimerState.isRunning()"), then it
+        // has no solve result that can be edited (yet). Hide the quick action
+        // buttons and any other adornments. The timer should be shown
+        // full-screen.
         //
-        // Fragment "onSaveInstanceState" is called ...
+        // ----------------------------------------
+        // IF THE TIMER IS ... NONE OF THE ABOVE...
+        // ----------------------------------------
         //
+        // If the timer is not stopped, reset, or running, then it is in the
+        // process of starting and is in a hold-to-start or ready-to-start
+        // state. In these states, the quick action buttons should be hidden,
+        // but the timer should not be shown full-screen until it starts proper.
+        // That transition to full-screen can be handled by the appropriate
+        // timer cue notified to "onTimerCue()" when ready-to-start.
+        //
+        // A timer is never restored/wakened into a hold-to-start or
+        // ready-to-start state, so there is no need for "onTimerSet()" to try
+        // to figure out if it is in one of those states and decide if the timer
+        // should be displayed full-screen or not. If the timer is running
+        // (i.e., it has gone past those states), then show it full-screen;
+        // if not running, then the timer cue *will* be fired soon enough and
+        // the full-screen transition will happen then, so do not show it
+        // full-screen just yet.
         //
 
-        //
-        // 1. If the timer stage is "UNUSED", hide the editing controls and
-        //    transition this fragment to "NO_SOLVE".
-        //
-        // 2. If the timer stage is "STOPPED", then:
-        //    (This assumes a synchronous save has been performed.)
-        //    a) If "TimerState.getSolve()" is not null, then:
-        //       i.   If that solve has an ID, transition to "SOLVE_IN_EDIT".
-        //       ii.  If that solve has no ID, then WTF? FIXME?
-        //    b) If "TimerState.getSolve()" is null, then WTF?
-        //
-        // FIXME: To what extent are further transitions required? Won't the
-        // saved instance state handle this for the most part?
-        //
-        // 3. If the timer stage is other than those stages, then transition
-        //    this fragment to "TIMER_???".
-
-        if (timerState.isUnused()) {
-            // An unused timer is typical if there was no saved timer state to
-            // be restored, or if the timer has been reset (e.g. if the solve
-            // was deleted via the editing controls, or if other changes to the
-            // solve data were notified and the solve may have been deleted or
-            // edited other than via the timer API).
-            //
-            // An unused timer is also the state of the timer that is presented
-            // immediately after the user's first touch down on the timer, just
-            // before cues, such as "CUE_INSPECTION_HOLDING_FOR_START" are
-            // notified to "onTimerCue". The behaviour has been to show "0.00"
-            // and only go "full-screen" when the timer is ready to start, so
-            // that will be done from "onTimerCue".
-            hideQuickActionButtons();
+        if (timerState.isStopped()) {
             showFullScreenTimer(false);
-        } else if (timerState.isStopped()) {
-            // NOTE: If a solve attempt is cancelled, the cancelled timer state
-            // will not be notified to "onTimerSet()". The cancelled state is
-            // only notified to "onTimerCue()" for "CUE_CANCELLING". The cue is
-            // then followed by a call to "onTimerSet()" with the state that
-            // was restored after the cancelled state was discarded. Therefore,
-            // if "isStopped()" is true, then there should be a valid solve
-            // present.
-            //
-            // IMPORTANT: As "onSolveAttemptStop(Solve)" saves the solve to the
-            // database synchronously and "onTimerSet()" is called *after* that
-            // method, the solve will already be saved and should be ready to
-            // be edited. "onTimerSet()" will also be called after each
-            // subsequent edit that affects the timer, i.e., if there are any
-            // changes to the penalties. This also allows the buttons that
-            // control the editing of penalties to be enabled/disabled as
-            // appropriate.
-            if (timerState.getSolve() != null) {
-                showQuickActionButtons(timerState.getSolve());
+
+            final Solve solve = timerState.getSolve();
+
+            if (solve != null) {
+                final long solveID = solve.getID();
+
+                if (solveID == Solve.NO_ID) {
+                    // Waiting for "ACTION_ONE_SOLVE_ADDED".
+                    hideQuickActionButtons();
+                } else if (solveID != mVerifiedSolveID) {
+                    // The last verified solve had a different ID (or is set to
+                    // "NO_ID") and this solve is not yet verified to exist.
+                    // Verify now and wait for "ACTION_SOLVE_VERIFIED".
+                    mVerifiedSolveID = Solve.NO_ID;
+                    TwistyTimer.getDBHandler()
+                               .verifySolveAndNotifyAsync(solveID);
+                    showQuickActionButtons(solve, false); // Show disabled.
+                } else {
+                    showQuickActionButtons(solve, true);  // Show enabled.
+                }
             } else {
-                // This is not expected to happen. Probably a bug or a false
-                // assumption about when this method is or is not called.
                 throw new IllegalStateException(
-                    "onTimerSet: State of stopped timer is unexpected: "
-                    + timerState);
+                    "BUG! Stopped timer is missing its Solve instance.");
             }
+        } else if (timerState.isReset()) {
             showFullScreenTimer(false);
-        } else {
-            // Timer is running, so it should be shown full-screen.
-            //
-            // "onTimerSet()" is never called when the timer is in a
-            // "hold-to-start" state. Just before such a state, "onTimerSet()"
-            // is passed an unused timer state. If the timer state is saved to
-            // and then restored from instance state, it will not be restored
-            // into a "hold-to-start" state. Therefore, there will never be a
-            // need to restore the UI to the brief state where the timer is
-            // waiting for a hold-to-start period to be completed and is not
-            // yet showing the timer full-screen. That transition is always
-            // driven from "onTimerCue()".
             hideQuickActionButtons();
+        } else if (timerState.isRunning()) {
             showFullScreenTimer(true);
+            hideQuickActionButtons();
+        } else {
+            // Timer is in a hold-to-start or ready-to-start state. Wait for
+            // "onTimerCue()" before going full-screen.
+            showFullScreenTimer(false);
+            hideQuickActionButtons();
         }
+
+        // FIXME: If the solve is reset (e.g., just after it has been deleted)
+        // hide "mvCongratsText", etc. Could this be built into the show/hide
+        // methods for the quick action buttons? Well, into "hide", anyway.
+    }
+
+    @Override
+    public void onTimerPenalty(@NonNull TimerState timerState) {
+        // Do nothing. Only of interest to the "TimerView", at present.
     }
 
     @Override
     @NonNull
-    public Solve onSolveAttemptStart() {
-        // FIXME: Should this be in sync with "CUE_STARTING"? Is that cue
-        // even needed? Perhaps it would be handy for triggering sounds or
-        // flashes.... Hmm, I think that cue fires a bit later in the
-        // sequence that this call-back might.
+    public Solve onSolveStart() {
+        if (DEBUG_ME) Log.d(TAG, "onSolveStart()");
 
-        // FIXME: IMPORTANT: Should this be called even when just
-        // holding-for-start? In that case, "CUE_STARTING" is not yet fired.
-        // However, I think it might be OK to just fire the early cues before
-        // calling this method, as the "TimerState" will just be reporting
-        // all zeros and there is no problem displaying the early timer state
-        // in the absence of a "Solve". What about "onTimerRestored"? Should
-        // that be called or not, or is it moot for the case where
-        // "onTimerStarted" would be called?
-
-        // FIXME: Create a new "Solve" and set the puzzle type, category and
-        // scramble.
-
-        // FIXME: What is the procedure if the attempt is cancelled? Should
-        // the scramble be consumed?
         final MainState mainState = getMainState();
         final Solve newSolve = new Solve(
             mainState.getPuzzleType(), mainState.getSolveCategory(),
             mUnsolvedScramble != null ? mUnsolvedScramble.scramble : null);
+
+        // Ensure that, if the timer is cancelled, the "previous" solve that is
+        // restored will be re-verified by "onTimerSet()". This ensures that
+        // any background tasks that might affect the database record for the
+        // "previous" solve will not cause any problems.
+        mVerifiedSolveID = Solve.NO_ID;
 
         // Generate a new scramble to replace the now-consumed scramble. This
         // does nothing if scrambles are not enabled. An early result from the
@@ -1142,34 +1294,46 @@ public class TimerFragment extends BaseMainFragment
     }
 
     @Override
-    public void onSolveAttemptStop(@NonNull Solve solve) {
-        // To keep things simple for now, this save is synchronous. The ID is
-        // set before returning/broadcasting the new solve and transitioning to
-        // "SOLVE_IN_EDIT".
-        solve.setID(TwistyTimer.getDBHandler().addSolve(solve));
+    public void onSolveStop(@NonNull Solve solve) {
+        if (DEBUG_ME) Log.d(TAG, "onSolveStop(" + solve + ')');
+
+        // The solve is saved asynchronously. "onTimerSet()" will be called back
+        // when this method returns, so the result can be displayed then, but
+        // wait for the broadcast of "ACTION_ONE_SOLVE_ADDED" to be received
+        // before presenting the quick-action controls. The ID will be set on
+        // the "Solve" instance passed back in that broadcast intent.
+        TwistyTimer.getDBHandler().addSolveAndNotifyAsync(solve);
 
         if (!solve.getPenalties().hasDNF()) {
             proclaimRecordTimes(solve);
         }
+    }
 
-        // FIXME: What if there is an inspection time-out when the fragment is
-        // not added? Is a guard needed around "getMainState()"? Would it make
-        // more sense to capture that information when the timer is added
-        // (storing it in a "Solve") and then updating that solve later?
-        // FIXME: UPDATE: Most of the necessary details are on "solve", now.
-        // FIXME: What if the main state of the solve does not match the
-        // current main state? Would that confuse one of the loaders?
-        TTIntent.builder(CATEGORY_TIME_DATA_CHANGES, ACTION_TIME_ADDED)
-                .mainState(getMainState())
-                .solve(solve)
-                .broadcast();
-
-        // FIXME: If "TimerState.isSaved() == true", then if
-        // "TimerListFragment" is used to delete the solve (either just the
-        // single solve, or all from the session, or whatever), then the
-        // solve-in-edit in "TimerFragment" will also need to be deleted.
-        // That might take a little bit of coordination, or maybe some more
-        // reliable DB update notification approach.
+    /**
+     * <p>
+     * Indicates if the timer is currently "busy". The timer is "busy" if it is
+     * running, or if it the user is interacting with the timer and it is in a
+     * hold-to-start or ready-to-start state. Conversely, it is not busy when it
+     * is stopped or reset. The timer will not be reported as busy if it has not
+     * yet been created.
+     * </p>
+     * <p>
+     * If the timer is busy, the display should not be interrupted with the
+     * results of background tasks, such as new scramble sequences or scramble
+     * images. For example, if in a hold-to-start state, the scramble image for
+     * the newly-pending solve attempt may be showing, so if a new scramble is
+     * generated in the background, it would be confusing if that were to
+     * change suddenly before the user lifts up the touch and starts the timer.
+     * </p>
+     *
+     * @return {@code true} if the timer is busy, or {@code false} if it is not.
+     */
+    private boolean isTimerBusy() {
+        // NOTE: "TimerState.isRunning()" is not the test used here, as that
+        // excludes the hold-to-start and ready-to-start states.
+        return mTimer != null
+               && !mTimer.getTimerState().isReset()
+               && !mTimer.getTimerState().isStopped();
     }
 
     /**
@@ -1198,7 +1362,7 @@ public class TimerFragment extends BaseMainFragment
         // *non-DNF* times have been recorded in the database across all
         // sessions, including the current session.
 
-        final long newTime = solve.getTime();
+        final long newTime = solve.getTime(); // Rounded, same as in statistics.
 
         if (solve.getPenalties().hasDNF() || newTime <= 0
                 || mRecentStatistics == null
@@ -1211,44 +1375,48 @@ public class TimerFragment extends BaseMainFragment
         }
 
         if (Prefs.proclaimBestTime()) {
-            final long previousBestTime = mRecentStatistics.getAllTimeBestTime();
+            final long previousBestTime
+                = mRecentStatistics.getAllTimeBestTime();
 
             // If "previousBestTime" is a DNF or UNKNOWN, it will be less
             // than zero, so the new solve time cannot better (i.e., lower).
             if (newTime < previousBestTime ) {
                 mvCongratsRipple.startRippleAnimation();
                 mvCongratsText.setText(getString(R.string.personal_best_message,
-                        formatTimeStatistic(previousBestTime - newTime)));
+                    formatTimeStatistic(previousBestTime - newTime)));
                 mvCongratsText.setVisibility(View.VISIBLE);
 
                 new Handler().postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        if (mvCongratsRipple != null)
+                        if (mvCongratsRipple != null) {
                             mvCongratsRipple.stopRippleAnimation();
+                        }
                     }
                 }, 2940);
             }
         }
 
         if (Prefs.proclaimWorstTime()) {
-            final long previousWorstTime = mRecentStatistics.getAllTimeWorstTime();
+            final long previousWorstTime
+                = mRecentStatistics.getAllTimeWorstTime();
 
             // If "previousWorstTime" is a DNF or UNKNOWN, it will be less
             // than zero. Therefore, make sure it is at least greater than
             // zero before testing against the new time.
             if (previousWorstTime > 0 && newTime > previousWorstTime) {
-                mvCongratsText.setText(getString(R.string.personal_worst_message,
+                mvCongratsText.setText(
+                    getString(R.string.personal_worst_message,
                         formatTimeStatistic(newTime - previousWorstTime)));
 
                 final int bgDrawableRes
-                        = Prefs.getBoolean(R.string.pk_timer_bg_enabled,
-                                           R.bool.default_timer_bg_enabled)
-                          ? R.drawable.ic_emoticon_poop_white_18dp
-                          : R.drawable.ic_emoticon_poop_black_18dp;
+                    = Prefs.getBoolean(R.string.pk_timer_bg_enabled,
+                                       R.bool.default_timer_bg_enabled)
+                        ? R.drawable.ic_emoticon_poop_white_18dp
+                        : R.drawable.ic_emoticon_poop_black_18dp;
 
                 mvCongratsText.setCompoundDrawablesWithIntrinsicBounds(
-                        bgDrawableRes, 0, bgDrawableRes, 0);
+                    bgDrawableRes, 0, bgDrawableRes, 0);
                 mvCongratsText.setVisibility(View.VISIBLE);
             }
         }
@@ -1290,10 +1458,12 @@ public class TimerFragment extends BaseMainFragment
 
                 mvScrambleImg.getLayoutParams().width *= scrambleImageScale;
                 mvScrambleImg.getLayoutParams().height
-                        *= calculateScrambleImageHeightMultiplier(scrambleImageScale, puzzleType);
+                    *= calculateScrambleImageHeightMultiplier(
+                        scrambleImageScale, puzzleType);
             } else {
                 mvScrambleImg.getLayoutParams().height
-                        *= calculateScrambleImageHeightMultiplier(1, puzzleType); // 1 == 100%
+                    *= calculateScrambleImageHeightMultiplier(
+                        1, puzzleType); // 1 == 100%
             }
         }
     }
@@ -1353,51 +1523,65 @@ public class TimerFragment extends BaseMainFragment
             return;
         }
 
-        // Save these for later. The best and worst times can be retrieved
-        // and compared to the next new solve time to be added via
-        // "addNewSolve".
+        // Save these for later. The best and worst times can be retrieved and
+        // compared to the next new solve time to be added via "addNewSolve".
         mRecentStatistics = stats; // May be null.
 
         if (stats == null) {
             return;
         }
 
-        // "TIME_UNKNOWN" times will be formatted as "--", not "0.00". This
-        // is useful when an average has yet to be calculated. For example,
-        // the Ao50 value after only 49 solves are added. The values are
-        // returned from "stats" already rounded appropriately.
-        String sessionCount
-                = String.format(Locale.getDefault(), "%,d", stats.getSessionNumSolves());
-        String sessionMeanTime = formatTimeStatistic(stats.getSessionMeanTime());
-        String sessionBestTime = formatTimeStatistic(stats.getSessionBestTime());
-        String sessionWorstTime = formatTimeStatistic(stats.getSessionWorstTime());
+        // "TIME_UNKNOWN" times will be formatted as "--", not "0.00". This is
+        // useful when an average has yet to be calculated. For example, the
+        // Ao50 value after only 49 solves are added. The values are returned
+        // from "stats" already rounded appropriately.
+        String sessionCount = String.format(
+            Locale.getDefault(), "%,d", stats.getSessionNumSolves());
+        String sessionMeanTime
+            = formatTimeStatistic(stats.getSessionMeanTime());
+        String sessionBestTime
+            = formatTimeStatistic(stats.getSessionBestTime());
+        String sessionWorstTime
+            = formatTimeStatistic(stats.getSessionWorstTime());
 
         String sessionCurrentAvg5 = formatTimeStatistic(
-                stats.getAverageOf(5, true).getCurrentAverage());
+            stats.getAverageOf(5, true).getCurrentAverage());
         String sessionCurrentAvg12 = formatTimeStatistic(
-                stats.getAverageOf(12, true).getCurrentAverage());
+            stats.getAverageOf(12, true).getCurrentAverage());
         String sessionCurrentAvg50 = formatTimeStatistic(
-                stats.getAverageOf(50, true).getCurrentAverage());
+            stats.getAverageOf(50, true).getCurrentAverage());
         String sessionCurrentAvg100 = formatTimeStatistic(
-                stats.getAverageOf(100, true).getCurrentAverage());
+            stats.getAverageOf(100, true).getCurrentAverage());
 
         mvStatsTimesAvg.setText(
-                sessionCurrentAvg5 + "\n" +
-                        sessionCurrentAvg12 + "\n" +
-                        sessionCurrentAvg50 + "\n" +
-                        sessionCurrentAvg100);
+            sessionCurrentAvg5 + "\n"
+            + sessionCurrentAvg12 + "\n"
+            + sessionCurrentAvg50 + "\n"
+            + sessionCurrentAvg100);
 
         mvStatsTimesMore.setText(
-                sessionMeanTime + "\n" +
-                        sessionBestTime + "\n" +
-                        sessionWorstTime + "\n" +
-                        sessionCount);
+            sessionMeanTime + "\n"
+            + sessionBestTime + "\n"
+            + sessionWorstTime + "\n"
+            + sessionCount);
     }
 
     private void showFullScreenTimer(boolean isFullScreen) {
         if (DEBUG_ME) Log.d(TAG, "showFullScreenTimer(" + isFullScreen + ')');
 
         if (isFullScreen) {
+            // Locking the orientation avoids configuration changes (fragment
+            // re-starts) while the timer is running full-screen.
+            //
+            // TODO: Review this. Previously, instance state was not saved, so
+            // configuration changed had to be avoided. However, the new state
+            // management and "PuzzleTimer" should be able to handle it. The
+            // caveat is that touch events that occur during a configuration
+            // change might be lost. Therefore, a touch intended to stop the
+            // timer could jolt the device and trigger a screen rotation. In
+            // that case, is it certain that the timer will stop and that the
+            // screen will be restored properly? Until edge cases like that are
+            // tested, it is probably best to lock the orientation.
             lockOrientation(getActivity());
             // FIXME: Should probably broadcast this from "onTimerCue"...
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_HIDE_TOOLBAR);
@@ -1405,18 +1589,21 @@ public class TimerFragment extends BaseMainFragment
             hideItems();
         } else {
             // "TimerMainFragment" hosts the tool-bar, so it will show it.
-            // After the animation is done, "ACTION_TOOLBAR_RESTORED" will be
-            // fired back to this fragment and it will show all of its own
-            // views ("showItems()") that were hidden when the toolbar was
-            // hidden.
+            // However, it animates it back into view, so this fragment must do
+            // nothing until it receives the "ACTION_TOOLBAR_RESTORED" intent
+            // broadcast when that animation ends. While "mIsRestoringToolBar"
+            // is true, touch events will not be relayed to the puzzle timer,
+            // so the timer cannot be restarted, etc., until everything settles
+            // down. That flag is cleared, and the other views of this fragment
+            // are made visible, once that broadcast intent is received.
             mIsRestoringToolBar = true;
             unlockOrientation(getActivity());
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SHOW_TOOLBAR);
         }
     }
 
-    private void showItems(boolean isSolveEditable) {
-        if (DEBUG_ME) Log.d(TAG, "showItems(" + isSolveEditable + ')');
+    private void showItems() {
+        if (DEBUG_ME) Log.d(TAG, "showItems()");
 
         if (Prefs.isScrambleEnabled()) {
             mvScrambleText.setEnabled(true);
@@ -1435,11 +1622,6 @@ public class TimerFragment extends BaseMainFragment
 
         if (Prefs.showSessionStats()) {
             mvStatsPanel.setVisibility(View.VISIBLE);
-        }
-
-        if (isSolveEditable && Prefs.showQuickActions()) {
-            mvQuickActionPanel.setEnabled(true);
-            mvQuickActionPanel.setVisibility(View.VISIBLE);
         }
     }
 
@@ -1476,11 +1658,6 @@ public class TimerFragment extends BaseMainFragment
         if (Prefs.showSessionStats()) {
             mvStatsPanel.setVisibility(View.INVISIBLE);
         }
-
-        if (Prefs.showQuickActions()) {
-            mvQuickActionPanel.setEnabled(false);
-            mvQuickActionPanel.setVisibility(View.INVISIBLE);
-        }
     }
 
     /**
@@ -1488,6 +1665,8 @@ public class TimerFragment extends BaseMainFragment
      * whole panel that contains the buttons.
      */
     private void hideQuickActionButtons() {
+        if (DEBUG_ME) Log.d(TAG, "hideQuickActionButtons()");
+
         // Use "INVISIBLE", not "GONE", otherwise a layout transition from
         // "INVISIBLE" to "GONE" might be animated visibly, which looks
         // really bad.
@@ -1497,66 +1676,112 @@ public class TimerFragment extends BaseMainFragment
     /**
      * Shows the quick action buttons. The enabled state of the buttons (and
      * the text of some of the buttons) is matched to the state of the solve
-     * and its penalties.
+     * and its penalties. If the quick action buttons are not enabled in the
+     * preferences, they will not be shown (and will be hidden if already
+     * showing when they should not be).
      *
      * @param solve
      *     The solve for which the quick action buttons should be presented.
+     *     If the solve has no database record ID set (i.e., if the ID is set
+     *     to {@link Solve#NO_ID}), the buttons will be shown, but they will
+     *     not be enabled.
+     * @param isVerified
+     *     {@code true} if the solve has been verified to exist in the database
+     *     and is a normal solve record (i.e., it is not a "fake" solve record
+     *     used to define the name of a solve category); or {@code false} if
+     *     the solve has not been so verified. If the solve is not verified,
+     *     the buttons will be displayed, but they will not be enabled. When
+     *     the solve is later verified, call this method again to enable the
+     *     buttons as appropriate.
      */
-    private void showQuickActionButtons(@NonNull Solve solve) {
-        final Penalties p = solve.getPenalties();
+    private void showQuickActionButtons(
+            @NonNull Solve solve, boolean isVerified) {
+        if (DEBUG_ME) Log.d(TAG,
+            "showQuickActionButtons(" + solve + ", " + isVerified + ')');
 
-        if (p.hasPostStartDNF()) {
-            // This DNF can be annulled. Show "-DNF".
-            mvDNFButton.setText("-DNF");
-            mvDNFButton.setEnabled(true);
-        } else if (p.hasPreStartDNF()) {
-            // A pre-start DNF cannot be annulled as it was not added by the
-            // user. Show "-DNF", but disable it.
-            mvDNFButton.setText("-DNF");
-            mvDNFButton.setEnabled(true);
-        } else if (!p.hasDNF()) {
-            // A post-start DNF can be incurred. Show "+DNF".
-            mvDNFButton.setText("+DNF");
-            mvDNFButton.setEnabled(true);
+        if (!Prefs.showQuickActions()) {
+            hideQuickActionButtons();
+            return;
         }
 
-        // Only post-start "+2" penalties can be edited. If there is a
-        // pre-start DNF, there can be no post-start penalties.
-        mvPlusTwoButton.setEnabled(!p.hasPreStartDNF()
-                && p.getPostStartPlusTwoCount() < Penalties.MAX_POST_START_PLUS_TWOS);
-        mvMinusTwoButton.setEnabled(p.getPostStartPlusTwoCount() > 0);
+        final Penalties p = solve.getPenalties();
 
+        if (p.canIncurPostStartPenalty(Penalty.DNF)) {
+            // A post-start DNF can be incurred. Show "+DNF" and clear the tag.
+            mvDNFButton.setText("+DNF");
+            mvDNFButton.setEnabled(isVerified);
+            mvDNFButton.setTag(null);
+        } else if (p.canAnnulPostStartPenalty(Penalty.DNF)) {
+            // This DNF can be annulled. Show "-DNF" and tag as "ANNUL_DNF".
+            mvDNFButton.setText("-DNF");
+            mvDNFButton.setEnabled(isVerified);
+            mvDNFButton.setTag(ANNUL_DNF);
+        } else {
+            // If a post-start DNF can neither be incurred nor annulled, it is
+            // because there is a pre-start DNF prohibiting it. A pre-start DNF
+            // cannot be annulled, as it was not added by the user. Show "-DNF",
+            // but disable the button.
+            // FIXME: Might be better to strike this out, or something like
+            // that. Just disabling it might be confusing.
+            mvDNFButton.setText("-DNF");
+            mvDNFButton.setEnabled(false);
+            mvDNFButton.setTag(ANNUL_DNF);
+        }
+
+        // Only *post*-start "+2" (and DNF) penalties can be edited. If there
+        // is a pre-start "+2" caused by overrunning the inspection time, then
+        // it cannot be annulled. (That would be cheating!)
+        mvPlusTwoButton.setEnabled(
+            isVerified && p.canIncurPostStartPenalty(Penalty.PLUS_TWO));
+        mvMinusTwoButton.setEnabled(
+            isVerified && p.canAnnulPostStartPenalty(Penalty.PLUS_TWO));
+
+        // Until the solve is verified, it is not safe to allow it to be
+        // deleted or have its comment changed.
+        mvDeleteButton.setEnabled(isVerified);
+        mvCommentButton.setEnabled(isVerified);
+
+        // Make the buttons *look* disabled if they are disabled.
         mvDNFButton.setAlpha(mvDNFButton.isEnabled() ? 1f : 0.5f);
         mvPlusTwoButton.setAlpha(mvPlusTwoButton.isEnabled() ? 1f : 0.5f);
         mvMinusTwoButton.setAlpha(mvMinusTwoButton.isEnabled() ? 1f : 0.5f);
+        mvDeleteButton.setAlpha(mvDeleteButton.isEnabled() ? 1f : 0.5f);
+        mvCommentButton.setAlpha(mvCommentButton.isEnabled() ? 1f : 0.5f);
 
         mvQuickActionPanel.setVisibility(View.VISIBLE);
     }
 
     public static void lockOrientation(Activity activity) {
-        int rotation = ((WindowManager) activity.getSystemService(Context.WINDOW_SERVICE))
+        int rotation =
+            ((WindowManager) activity.getSystemService(Context.WINDOW_SERVICE))
                 .getDefaultDisplay().getRotation();
-        int tempOrientation = activity.getResources().getConfiguration().orientation;
+        int tempOrientation
+            = activity.getResources().getConfiguration() .orientation;
         int orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 
         switch (tempOrientation) {
             case Configuration.ORIENTATION_LANDSCAPE:
-                if (rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_90)
+                if (rotation == Surface.ROTATION_0
+                    || rotation == Surface.ROTATION_90)
                     orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
                 else
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
+                    orientation
+                        = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
                 break;
             case Configuration.ORIENTATION_PORTRAIT:
-                if (rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_270)
+                if (rotation == Surface.ROTATION_0
+                    || rotation == Surface.ROTATION_270)
                     orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
                 else
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
+                    orientation
+                        = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
         }
         activity.setRequestedOrientation(orientation);
     }
 
     private static void unlockOrientation(Activity activity) {
-        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        activity.setRequestedOrientation(
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
     /**
@@ -1575,7 +1800,8 @@ public class TimerFragment extends BaseMainFragment
      *     if scrambles are not enabled, so no scramble will be generated.
      */
     public boolean generateScramble(@NonNull PuzzleType puzzleType) {
-        if (DEBUG_ME) Log.d(TAG, "generateScramble(puzzleType=" + puzzleType.typeName() + ')');
+        if (DEBUG_ME) Log.d(TAG, "generateScramble(puzzleType="
+                                 + puzzleType.typeName() + ')');
 
         // NOTE: This is the same behaviour as before: scrambles are either
         // enabled and generated automatically when required, or they are
@@ -1593,11 +1819,10 @@ public class TimerFragment extends BaseMainFragment
             mvScrambleText.setClickable(false);
             mvScrambleImg.setVisibility(View.INVISIBLE);
 
-            if (!mState.isTimerDominant()) {
-                // Scrambles and images can be generated in the background
-                // while the timer is running/dominant. In that case, the
-                // progress spinner should not be displayed, as it would
-                // intrude on the timer.
+            if (!isTimerBusy()) {
+                // Scrambles and images can be generated in the background while
+                // the timer is busy. In that case, the progress spinner should
+                // not be displayed, as it would intrude on the timer.
                 mvScrambleProgress.setVisibility(View.VISIBLE);
             }
 
@@ -1625,15 +1850,15 @@ public class TimerFragment extends BaseMainFragment
      *     will be generated.
      */
     public boolean generateScrambleImage(@NonNull ScrambleData scrambleData) {
-        if (DEBUG_ME) Log.d(TAG, "generateScrambleImage(scrambleData=" + scrambleData + ')');
+        if (DEBUG_ME) Log.d(TAG, "generateScrambleImage(" + scrambleData + ')');
 
-        if (Prefs.showScrambleImage()) { // Implies scramble generation is also enabled.
+        if (Prefs.showScrambleImage()) { // => scramble generation is enabled.
             TTIntent.broadcastNewScrambleImageRequest(
                     scrambleData.puzzleType, scrambleData.scramble);
 
             // "hideScrambleImage()" is called from "generateScramble". It
             // still remains hidden.
-            if (!mState.isTimerDominant()) {
+            if (!isTimerBusy()) {
                 // Scrambles and images can be generated in the background
                 // while the timer is running. In that case, the progress
                 // spinner should not be displayed.
@@ -1654,10 +1879,11 @@ public class TimerFragment extends BaseMainFragment
      *     the puzzle type for which it was generated.
      */
     private void onScrambleGenerated(final ScrambleData scrambleData) {
-        if (DEBUG_ME) Log.d(TAG, "onScrambleGenerated(scrambleData=" + scrambleData + ')');
+        if (DEBUG_ME) Log.d(TAG, "onScrambleGenerated(" + scrambleData + ')');
 
         if (!isAdded() || getView() == null) {
-            if (DEBUG_ME) Log.d(TAG, "  Cannot display scramble! Not attached or no view.");
+            if (DEBUG_ME) Log.d(TAG,
+                "  Cannot display scramble! Not attached or no view.");
             // May have received the data too late for it to be displayed (or
             // too early).
             return;
@@ -1681,12 +1907,15 @@ public class TimerFragment extends BaseMainFragment
                     return;
                 }
 
-                Rect scrambleRect = new Rect(mvScrambleText.getLeft(), mvScrambleText.getTop(),
-                        mvScrambleText.getRight(), mvScrambleText.getBottom());
-                Rect chronometerRect = new Rect(mvTimerWidget.getLeft(), mvTimerWidget.getTop(),
-                        mvTimerWidget.getRight(), mvTimerWidget.getBottom());
-                Rect congratsRect = new Rect(mvCongratsText.getLeft(), mvCongratsText.getTop(),
-                        mvCongratsText.getRight(), mvCongratsText.getBottom());
+                Rect scrambleRect = new Rect(
+                    mvScrambleText.getLeft(), mvScrambleText.getTop(),
+                    mvScrambleText.getRight(), mvScrambleText.getBottom());
+                Rect chronometerRect = new Rect(
+                    mvTimerView.getLeft(), mvTimerView.getTop(),
+                    mvTimerView.getRight(), mvTimerView.getBottom());
+                Rect congratsRect = new Rect(
+                    mvCongratsText.getLeft(), mvCongratsText.getTop(),
+                    mvCongratsText.getRight(), mvCongratsText.getBottom());
 
                 if (Rect.intersects(scrambleRect, chronometerRect) ||
                         (mvCongratsText.getVisibility() == View.VISIBLE
@@ -1700,7 +1929,8 @@ public class TimerFragment extends BaseMainFragment
                         public void onClick(View view) {
                             mvCrossHintsText.setText(scrambleData.scramble);
                             mvCrossHintsText.setTextSize(
-                                    TypedValue.COMPLEX_UNIT_PX, mvScrambleText.getTextSize());
+                                TypedValue.COMPLEX_UNIT_PX,
+                                mvScrambleText.getTextSize());
                             mvCrossHintsText.setGravity(Gravity.CENTER);
                             mvCrossHintsProgress.setVisibility(View.GONE);
                             mvCrossHintsProgressText.setVisibility(View.GONE);
@@ -1712,23 +1942,24 @@ public class TimerFragment extends BaseMainFragment
                     mvScrambleText.setClickable(false);
                 }
 
-                if (!mState.isTimerDominant()) {
-                    // Scrambles and images can be generated in the
-                    // background while the timer is running. In that case,
-                    // the scramble text should not be displayed yet.
+                if (!isTimerBusy()) {
+                    // Scrambles and images can be generated in the background
+                    // while the timer is running. In that case, the scramble
+                    // text should not be displayed yet.
                     mvScrambleText.setVisibility(View.VISIBLE);
                 }
             }
         });
 
-        // No need to lock the UI waiting for the scramble image to be generated....
+        // No need to lock the UI waiting for the scramble image to be
+        // generated....
         mIsGeneratingScramble = false;
     }
 
     /**
-     * Notifies this fragment that the {@link ScrambleImageLoader} has
-     * completed the generation of a new scramble image for a scramble
-     * sequence. The image may now be displayed.
+     * Notifies this fragment that the {@link ScrambleImageLoader} has completed
+     * the generation of a new scramble image for a scramble sequence. The image
+     * may now be displayed.
      *
      * @param scrambleImageData
      *     The scramble image data describing the generated scramble image,
@@ -1739,7 +1970,8 @@ public class TimerFragment extends BaseMainFragment
                 + scrambleImageData + ')');
 
         if (!isAdded() || getView() == null) {
-            if (DEBUG_ME) Log.d(TAG, "  Cannot display scramble image! Not attached or no view.");
+            if (DEBUG_ME) Log.d(TAG,
+                "  Cannot display scramble image! Not attached or no view.");
             // May have received the data too late for it to be displayed (or
             // too early).
             return;
@@ -1748,42 +1980,47 @@ public class TimerFragment extends BaseMainFragment
         mvScrambleProgress.setVisibility(View.INVISIBLE);
         mvScrambleImg.setImageDrawable(scrambleImageData.image);
         mvBigScrambleImg.setImageDrawable(scrambleImageData.image);
-        if (!mState.isTimerDominant()) {
+        if (!isTimerBusy()) {
             mvScrambleImg.setVisibility(View.VISIBLE);
         } else {
-            if (DEBUG_ME) Log.d(TAG, "  Will not display scramble image while timer is dominant.");
+            if (DEBUG_ME) Log.d(TAG,
+                "  Will not display scramble image while timer is busy.");
         }
     }
 
-    private class GetOptimalCross extends AsyncTask<ScrambleData, Void, String> {
+    private class GetOptimalCross
+            extends AsyncTask<ScrambleData, Void, String> {
         @Override
         protected String doInBackground(ScrambleData... scrambles) {
-            // Increase the thread priority, as the user is waiting
-            // impatiently for the "tip" to appear. The default priority is
-            // probably the "background" priority, which is set by
-            // "AsyncTask". This priority may be subject to special handling,
-            // such as restricting the thread to no more than 5-10% of the
-            // CPU if any other threads are busy. However, this task is part
-            // of the foreground application, so it should not have to
-            // compete with background apps for CPU time. Therefore, keep the
-            // priority low enough to avoid stalling the UI, but just high
-            // enough to keep this thread out of the specially restricted
-            // "background" group. Use the "android.os.Process" methods to
-            // set the Linux thread priorities, as those are what matter.
+            // Increase the thread priority, as the user is waiting impatiently
+            // for the "tip" to appear. The default priority is probably the
+            // "background" priority, which is set by "AsyncTask". This priority
+            // may be subject to special handling, such as restricting the
+            // thread to no more than 5-10% of the CPU if any other threads are
+            // busy. However, this task is part of the foreground application,
+            // so it should not have to compete with background apps for CPU
+            // time. Therefore, keep the priority low enough to avoid stalling
+            // the UI, but just high enough to keep this thread out of the
+            // specially restricted "background" group. Use the
+            // "android.os.Process" methods to set the Linux thread priorities,
+            // as those are what matter.
             final int threadID = Process.myTid();
             final int savedThreadPriority = Process.getThreadPriority(threadID);
 
             Process.setThreadPriority(threadID,
-                    Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_MORE_FAVORABLE);
+                Process.THREAD_PRIORITY_BACKGROUND
+                + Process.THREAD_PRIORITY_MORE_FAVORABLE);
 
             try {
                 final ScrambleData scrambleData = scrambles[0];
-                String tip = new RubiksCubeOptimalCross(getString(R.string.optimal_cross))
+                String tip = new RubiksCubeOptimalCross(
+                    getString(R.string.optimal_cross))
                         .getTip(scrambleData.scramble);
 
                 if (Prefs.showXCrossHints(scrambleData.puzzleType)) {
                     tip += "\n\n";
-                    tip += new RubiksCubeOptimalXCross(getString(R.string.optimal_x_cross))
+                    tip += new RubiksCubeOptimalXCross(
+                        getString(R.string.optimal_x_cross))
                             .getTip(scrambleData.scramble);
                 }
 
@@ -1806,9 +2043,9 @@ public class TimerFragment extends BaseMainFragment
         protected void onPostExecute(String text) {
             super.onPostExecute(text);
 
-            // Do not intrude on the timer if it is "dominant".
+            // Do not intrude on the timer if it is "busy".
             if (mvCrossHintsProgressText != null && mvCrossHintsText != null
-                    && !mState.isTimerDominant()) {
+                    && !isTimerBusy()) {
                 mvCrossHintsText.setText(text);
                 mvCrossHintsText.setVisibility(View.VISIBLE);
 
@@ -1819,7 +2056,8 @@ public class TimerFragment extends BaseMainFragment
     }
 
     private void zoomScrambleImage(
-            final View smallImg, final View bigImg, View boundary, final int animationDuration) {
+            final View smallImg, final View bigImg, View boundary,
+            final int animationDuration) {
         // If there's an animation in progress, cancel it immediately and
         // proceed with this one.
         if (mScrambleImgAnimator != null) {
@@ -1888,10 +2126,13 @@ public class TimerFragment extends BaseMainFragment
         // scale properties (X, Y, SCALE_X, and SCALE_Y).
         final AnimatorSet growAnim = new AnimatorSet();
 
-        growAnim.play(ObjectAnimator.ofFloat(bigImg, View.X, startBounds.left, finalBounds.left))
-                .with(ObjectAnimator.ofFloat(bigImg, View.Y, startBounds.top, finalBounds.top))
-                .with(ObjectAnimator.ofFloat(bigImg, View.SCALE_X, startScale, 1f))
-                .with(ObjectAnimator.ofFloat(bigImg, View.SCALE_Y, startScale, 1f));
+        growAnim
+            .play(ObjectAnimator.ofFloat(
+                bigImg, View.X, startBounds.left, finalBounds.left))
+            .with(ObjectAnimator.ofFloat(
+                bigImg, View.Y, startBounds.top, finalBounds.top))
+            .with(ObjectAnimator.ofFloat(bigImg, View.SCALE_X, startScale, 1f))
+            .with(ObjectAnimator.ofFloat(bigImg, View.SCALE_Y, startScale, 1f));
 
         growAnim.setDuration(animationDuration);
         growAnim.setInterpolator(new DecelerateInterpolator());
@@ -1921,10 +2162,14 @@ public class TimerFragment extends BaseMainFragment
                 final AnimatorSet shrinkAnim = new AnimatorSet();
 
                 shrinkAnim
-                        .play(ObjectAnimator.ofFloat(bigImg, View.X, startBounds.left))
-                        .with(ObjectAnimator.ofFloat(bigImg, View.Y, startBounds.top))
-                        .with(ObjectAnimator.ofFloat(bigImg, View.SCALE_X, startScale))
-                        .with(ObjectAnimator.ofFloat(bigImg, View.SCALE_Y, startScale));
+                    .play(ObjectAnimator.ofFloat(
+                        bigImg, View.X, startBounds.left))
+                    .with(ObjectAnimator.ofFloat(
+                        bigImg, View.Y, startBounds.top))
+                    .with(ObjectAnimator.ofFloat(
+                        bigImg, View.SCALE_X, startScale))
+                    .with(ObjectAnimator.ofFloat(
+                        bigImg, View.SCALE_Y, startScale));
 
                 shrinkAnim.setDuration(animationDuration);
                 shrinkAnim.setInterpolator(new DecelerateInterpolator());

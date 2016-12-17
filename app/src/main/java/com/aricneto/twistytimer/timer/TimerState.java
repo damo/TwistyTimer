@@ -17,7 +17,6 @@ import static com.aricneto.twistytimer.timer.PuzzleTimer
     .INSPECTION_1ST_WARNING_REMAINING_DURATION;
 import static com.aricneto.twistytimer.timer.PuzzleTimer
     .INSPECTION_2ND_WARNING_REMAINING_DURATION;
-import static com.aricneto.twistytimer.timer.TimerCue.*;
 
 /**
  * <p>
@@ -227,19 +226,12 @@ public class TimerState implements Parcelable {
         mTimerCues = loadTimerCues();
     }
 
-    // TODO: Decide if the inspection duration and hold-to-start status need
-    // to be updated from (say) the fragment or activity state when the state
-    // is restored. It would really only be necessary if the timer remained
-    // running while in the "SettingsActivity". If the timer has stopped,
-    // then those values will not be used again and it does not matter if
-    // they are updated. Perhaps, for simplicity, do not allow them to be
-    // updated and just mandate that if instance state is restored, they
-    // cannot be updated unless a new "PuzzleTimer" instance is created. In
-    // general, a simple save/restore for a configuration change (such as an
-    // orientation change) will not require a new PuzzleTimer and its state
-    // can be restored. However, a change to a setting will require a new
-    // PuzzleTimer. This is pretty much going to happen anyway, as the
-    // "MainActivity" is recreated on returning from the "SettingsActivity".
+    /**
+     * Re-creates a timer state from a parcel. The timer state must have been
+     * previous written to a parcel by {@link #writeToParcel(Parcel, int)}.
+     *
+     * @param in The parcel from which to restore the state.
+     */
     protected TimerState(Parcel in) {
         mInspStartedAt = in.readLong();
         mInspStoppedAt = in.readLong();
@@ -344,45 +336,93 @@ public class TimerState implements Parcelable {
      */
     @NonNull
     private Set<TimerCue> loadTimerCues() {
-        final Set<TimerCue> cues;
+        // NOTE: If new cues are added, it is all to easy to forget to update
+        // this method to "load" those new cues. This occurred several times
+        // during the early development iterations. Therefore, a very defensive
+        // approach is taken here to ensure that nothing is added or omitted
+        // inadvertently. If a new cue is omitted, an exception will be thrown.
+        // If an old cue is removed, the code will not compile.
 
-        if (isInspectionEnabled()) {
-            cues = EnumSet.allOf(TimerCue.class);
+        final Set<TimerCue> cues = EnumSet.noneOf(TimerCue.class);
 
-            // The "elapsed time alarms" fire 7 and 3 seconds before the end
-            // of the inspection period. Remove these cues if the inspection
-            // period is configured to be shorter, If the inspection period
-            // is exactly 7 or 3 seconds long, do *not* fire the respective
-            // cue just as inspection starts, as that would be pointless.
-            if (mInspDuration <= INSPECTION_1ST_WARNING_REMAINING_DURATION) {
-                cues.remove(CUE_INSPECTION_7S_REMAINING);
-                if (mInspDuration
-                        <= INSPECTION_2ND_WARNING_REMAINING_DURATION) {
-                    cues.remove(CUE_INSPECTION_3S_REMAINING);
-                }
+        for (TimerCue cue : TimerCue.values()) {
+            final boolean isUsed;
+
+            switch (cue) {
+                case CUE_INSPECTION_READY_TO_START:
+                case CUE_INSPECTION_STARTED:
+                case CUE_INSPECTION_OVERRUN:
+                case CUE_INSPECTION_TIME_OUT:
+                case CUE_INSPECTION_SOLVE_READY_TO_START:
+                    isUsed = isInspectionEnabled();
+                    break;
+
+                case CUE_INSPECTION_RESUMED:
+                    // This cue is not loaded by default. It is fired from the
+                    // "INSPECTION_STARTED" stage, but *only* if returning to
+                    // that stage from "INSPECTION_SOLVE_HOLDING_FOR_START".
+                    // Therefore, it is loaded "manually" by the latter stage.
+                    isUsed = false;
+                    break;
+
+                case CUE_INSPECTION_HOLDING_FOR_START:
+                case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
+                    isUsed = isInspectionEnabled() && isHoldToStartEnabled();
+                    break;
+
+                case CUE_INSPECTION_7S_REMAINING:
+                    // The "elapsed time alarms" fire 7 and 3 seconds before
+                    // the end of the inspection period. Do not add these cues
+                    // if the inspection period is configured to be shorter,
+                    // If the inspection period is exactly 7 or 3 seconds
+                    // long, do *not* fire the respective cue at the instant
+                    // inspection starts, as that would be pointless.
+                    isUsed = isInspectionEnabled()
+                             && mInspDuration
+                                > INSPECTION_1ST_WARNING_REMAINING_DURATION;
+                    break;
+
+                case CUE_INSPECTION_3S_REMAINING:
+                    isUsed = isInspectionEnabled()
+                             && mInspDuration
+                                > INSPECTION_2ND_WARNING_REMAINING_DURATION;
+                    break;
+
+                case CUE_SOLVE_HOLDING_FOR_START:
+                    isUsed = !isInspectionEnabled() && isHoldToStartEnabled();
+                    break;
+
+                case CUE_SOLVE_READY_TO_START:
+                    isUsed = !isInspectionEnabled();
+                    break;
+
+                case CUE_SOLVE_STARTED:
+                case CUE_CANCELLING:
+                case CUE_STOPPING:
+                    isUsed = true;
+                    break;
+
+                default:
+                    // If a new cue is added and it is not handled explicitly
+                    // above, then throw a wobbler. This is safer than depending
+                    // on code inspections being enabled and not ignored.
+                    throw new UnsupportedOperationException(
+                        "BUG: Add support for cue '" + cue + "'.");
             }
-        } else {
-            cues = EnumSet.of(
-                CUE_SOLVE_HOLDING_FOR_START,
-                CUE_SOLVE_READY_TO_START,
-                CUE_SOLVE_STARTED,
-                CUE_STARTING, CUE_STOPPING);
-        }
 
-        if (!isHoldToStartEnabled()) {
-            cues.remove(CUE_INSPECTION_HOLDING_FOR_START);
-            cues.remove(CUE_INSPECTION_SOLVE_HOLDING_FOR_START);
-            cues.remove(CUE_SOLVE_HOLDING_FOR_START);
+            if (isUsed) {
+                cues.add(cue);
+            }
         }
 
         return cues;
     }
 
     /**
-     * Creates a new, unused timer state based on this timer state. This is
-     * equivalent to calling the constructor and passing the same values for
-     * the inspection duration and hold-to-start flag as are set on this
-     * timer state. The current stage will be {@link TimerStage#UNUSED UNUSED}.
+     * Creates a new, unused (reset) timer state based on this timer state.
+     * This is equivalent to calling the constructor and passing the same
+     * values for the inspection duration and hold-to-start flag as are set on
+     * this timer state. The current stage will be {@link TimerStage#UNUSED}.
      *
      * @return A new, unused timer state.
      */
@@ -539,18 +579,29 @@ public class TimerState implements Parcelable {
     /**
      * <p>
      * Gets the {@link Solve} associated with this timer state. If the timer
-     * state is unused, it will not have a solve. The solve will be set to the
-     * instance returned by {@link SolveAttemptHandler#onSolveAttemptStart()}
-     * only when the timer has started.
+     * state is reset or cancelled, it will not have a solve. The solve will be
+     * set to the instance returned by {@link SolveHandler#onSolveStart()} only
+     * when the timer has started. If the timer is cancelled, that reference to
+     * the solve will be reset to {@code null}. When the timer stops, the solve
+     * instance (which is immutable) will be replaced with a new instance that
+     * records the elapsed solve time, any penalties incurred, and the date-time
+     * stamp; all other properties will remain unchanged.
      * </p>
      * <p>
-     * <i>WARNING: the returned solve instance must not be edited without
-     * notifying the timer.</i>
+     * If, after the timer has stopped, the {@code Solve} is edited, the new
+     * solve instance must be notified to the puzzle timer by passing it to
+     * {@link PuzzleTimer#onSolveChanged(Solve)}. The timer will notify its
+     * event listeners of the change to the timer's state. That new solve
+     * instance will be used as the source for the values returned by
+     * {@link #getElapsedSolveTime()}, {@link #getPenalties()} and
+     * {@link #getResultTime()}. See the description of the latter method for
+     * more details.
      * </p>
      *
      * @return
-     *     The solve associated with this timer state, or {@code null} if
-     *     there is no solve associated yet.
+     *     The solve associated with this timer state; or {@code null} if there
+     *     is no solve associated yet, or if the solve was cleared because the
+     *     timer was cancelled or reset.
      */
     @Nullable
     public Solve getSolve() {
@@ -558,32 +609,28 @@ public class TimerState implements Parcelable {
     }
 
     /**
-     * Sets the {@link Solve} that will be associated with this timer state.
-     * The solve must be set when the stage transitions from {@code UNUSED}
-     * to another stage. Once set, the solve cannot be set to a different
-     * instance.
+     * Sets the {@link Solve} associated with this timer state.
      *
      * @param solve
      *     The solve to associate with this timer state. Must not be
      *     {@code null}.
-     *
-     * @throws IllegalStateException
-     *     If the solve has already been set, as it cannot be changed.
      */
-    void setSolve(@NonNull Solve solve) throws IllegalStateException {
-        if (mSolve != null) {
-            // The solve is expected to be set once and only once, so an
-            // attempt to set it again is probably the result of a bug in the
-            // timer state machine. Flag it!
-            throw new IllegalStateException("Solve is already set: " + mSolve);
-        }
+    void setSolve(@NonNull Solve solve) {
         mSolve = solve;
     }
 
     /**
+     * <p>
      * Gets the penalties that have been incurred for this solve attempt. The
      * returned instance is immutable; penalties can only be incurred or
      * annulled via a {@link PuzzleTimer}.
+     * </p>
+     * <p>
+     * If the timer is stopped and has recorded its result in a {@code Solve}
+     * instance, that instance will be used as the source of the reported
+     * penalties. This is the same as the approach described for
+     * {@link #getResultTime()}.
+     * </p>
      *
      * @return
      *     The penalties incurred for this solve attempt. May be
@@ -591,6 +638,12 @@ public class TimerState implements Parcelable {
      */
     @NonNull
     public Penalties getPenalties() {
+        // TODO (maybe): Alternatively, use "mSolve" to store the penalties and
+        // do not have any "mPenalties" field on this "TimerState" class.
+        if (isStopped() && mSolve != null) {
+            return mSolve.getPenalties();
+        }
+
         return mPenalties;
     }
 
@@ -600,62 +653,134 @@ public class TimerState implements Parcelable {
      * "+2" and the maximum number of pre-start "+2" penalties has already
      * been incurred.
      *
-     * @param penalty
-     *     The penalty to be incurred.
+     * @param penalty The penalty to be incurred.
+     *
+     * @throws IllegalStateException
+     *     If the timer has been stopped and its results have been recorded in
+     *     the referenced {@code Solve} instance. In that state, update the
+     *     penalties on the {@code Solve} and notify the puzzle timer by passing
+     *     the updated solve to {@link PuzzleTimer#onSolveChanged(Solve)}.
      */
-    // NOTE: Package access, as this is for use by "PuzzleTimer" and is not
-    // part of the public API.
-    void incurPreStartPenalty(@NonNull Penalty penalty) {
+    void incurPreStartPenalty(@NonNull Penalty penalty)
+            throws IllegalStateException {
+        if (isStopped()) {
+            throw new IllegalStateException(
+                "Cannot incur penalties on TimerState if timer is stopped.");
+        }
+
         mPenalties = mPenalties.incurPreStartPenalty(penalty);
     }
 
     /**
      * <p>
-     * Indicates if this timer state is "unused" or not. The state is "unused"
-     * if it has not recorded, is not currently recording, and is not currently
-     * preparing to record, a solve attempt. If unused, the timer state has no
-     * recorded solve and the user interface should present the unused timer
+     * Indicates if this timer state is reset or not. The state is reset if it
+     * has not recorded, is not currently recording, and is not currently
+     * preparing to record, a solve attempt. If reset, the timer state has no
+     * recorded solve and the user interface should present the reset timer
      * appropriately. For example, the timer display may show zero elapsed
      * time (or other appropriate value) and any editing controls for a solve
-     * attempt should be disabled or hidden. The timer state will be unused
-     * immediately after the timer is reset, or if no previous instance state
-     * has been restored.
+     * attempt will be disabled or hidden. The timer state is "reset" after
+     * {@link PuzzleTimer#reset()} is called (e.g., when a solve is deleted),
+     * or if no previous instance state has been restored (e.g., if the app has
+     * just been started).
      * </p>
      * <p>
-     * If this state is unused, it does not necessarily mean that a solve result
-     * is available, or even that the timer has started. The timer state is
-     * "used" on the instant that the user begins to interact with it, such as
-     * when holding for a short time before releasing to start the timer.
+     * If this state is not reset, it does not necessarily mean that a solve
+     * result is available, or even that the timer has started. The timer state
+     * is reset on the instant that the user begins to interact with it, such
+     * as when holding for a short time before releasing to start the timer.
+     * This state may be notified to {@link OnTimerEventListener#onTimerSet}
+     * just as the user starts interacting with the timer, but the state will
+     * have moved to one of the holding or ready states before subsequently
+     * notifying {@link OnTimerEventListener#onTimerCue} in response to those
+     * interactions.
      * </p>
      * <p>
-     * See also {@link #isStopped()}.
+     * See also {@link #isStopped()} and {@link #isRunning()}.
      * </p>
      *
      * @return
-     *     {@code true} if the timer state is unused; or {@code false} if the
-     *     timer state is used.
+     *     {@code true} if the timer state is reset; or {@code false} if the
+     *     timer state is not reset.
      */
-    public boolean isUnused() {
+    public boolean isReset() {
+        // NOTE: The public API uses "isReset()", rather than "isUnused()"; the
+        // latter being a bit too "internal" and potentially confusing.
         return mStage == TimerStage.UNUSED;
     }
 
     /**
      * <p>
      * Indicates if this timer state is "stopped" or not. The state is "stopped"
-     * if a solve attempt has been recorded, or if a solve attempt has been
-     * cancelled without recording it. Once stopped, a timer cannot be started
-     * again.
+     * if a solve attempt has been recorded. Once stopped, a timer cannot be
+     * started again. A timer in the "reset" state is not "stopped", as the
+     * solve attempt has not yet been started.
      * </p>
      * <p>
-     * See also {@link #isUnused()}.
+     * See also {@link #isReset()} and {@link #isRunning()}.
      * </p>
      *
      * @return
-     *     {@code true} if the timer state is unused; or {@code false} if the
-     *     timer state is used.
+     *     {@code true} if the timer state is stopped; or {@code false} if the
+     *     timer state is not stopped.
      */
     public boolean isStopped() {
+        // NOTE: "CANCELLING" and "STOPPING" are transient stages that will not
+        // be visible outside of the "PuzzleTimer", as the transition from, say,
+        // "SOLVE_STARTED" -> "STOPPING" -> "STOPPED" is performed atomically
+        // with respect to any outside observers.
         return mStage == TimerStage.STOPPED;
+    }
+
+    /**
+     * <p>
+     * Indicates if this timer state is currently tracking a running timer. The
+     * state is "running" when either the inspection countdown (if enabled) or
+     * the solve timer are running.
+     * </p>
+     * <p>
+     * This method is similar to a test that {@link #isInspectionRunning()}
+     * or {@link #isSolveRunning()} return {@code true}. However, between the
+     * instants when the inspection countdown is stopped and the solve timer is
+     * started, this method will still return {@code true}, while the other
+     * methods could both return {@code false}. This allows a distinction
+     * between the states when the timer is holding-to-start or ready-to-start
+     * at the beginning of the life-cycle and the states that then follow. This
+     * cannot be determined definitively by testing the other two methods, due
+     * to the possibility that the timer was in the "gap" between the inspection
+     * countdown stopping and the solve timer starting.
+     * </p>
+     * <p>
+     * See also {@link #isReset()} and {@link #isStopped()}.
+     * </p>
+     *
+     * @return
+     *     {@code true} if the timer state is running; or {@code false} if the
+     *     timer state is not running.
+     */
+    public boolean isRunning() {
+        switch (mStage) {
+            case UNUSED:
+            case STARTING:
+            case INSPECTION_HOLDING_FOR_START:
+            case INSPECTION_READY_TO_START:
+            case SOLVE_HOLDING_FOR_START:
+            case SOLVE_READY_TO_START:
+            case CANCELLING:
+            case STOPPING:
+            case STOPPED:
+                return false;
+
+            case INSPECTION_STARTED:
+            case INSPECTION_SOLVE_HOLDING_FOR_START:
+            case INSPECTION_SOLVE_READY_TO_START:
+            case SOLVE_STARTED:
+                return true;
+
+            default:
+                throw new UnsupportedOperationException(
+                    "BUG! Add support to 'isRunning()' for: " + mStage);
+        }
     }
 
     /**
@@ -665,10 +790,12 @@ public class TimerState implements Parcelable {
      * exclusive.
      *
      * @return
-     *     {@code true} if the inspection countdown is running; or {@code
-     *     false} if it is not running.
+     *     {@code true} if the inspection countdown is running; or {@code false}
+     *     if it is not running.
      */
-    boolean isInspectionRunning() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public boolean isInspectionRunning() {
         return mInspStartedAt != NEVER && mInspStoppedAt == NEVER;
     }
 
@@ -681,21 +808,43 @@ public class TimerState implements Parcelable {
      *     {@code true} if the solve timer is running; or {@code false} if it
      *     is not running.
      */
-    boolean isSolveRunning() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public boolean isSolveRunning() {
         return mSolveStartedAt != NEVER && mSolveStoppedAt == NEVER;
     }
 
     /**
+     * <p>
      * Gets the elapsed solve time. If the timer has not been started, or if
      * the solve attempt timed out during the inspection period, or if the
      * timer has started but no current time has been "marked", the elapsed
      * time will be zero. If the solve timer has started and has not yet
      * stopped, the elapsed time is calculated with respect to the most
      * recent current time instant recorded by {@link #mark(long)}.
+     * </p>
+     * <p>
+     * If the timer is stopped and has recorded its result in a {@code Solve}
+     * instance, that instance will be used as the source of the reported
+     * elapsed solve time. This is the same as the approach described for
+     * {@link #getResultTime()}, except time penalties are not included in the
+     * elapsed solve time value.
+     * </p>
      *
-     * @return The elapsed solve time in milliseconds.
+     * @return
+     *    The elapsed solve time in milliseconds. The value <i>excludes</i> any
+     *    time penalties.
      */
-    long getElapsedSolveTime() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public long getElapsedSolveTime() {
+        if (isStopped() && mSolve != null) {
+            // The solve reports the elapsed time inclusive of penalties, so
+            // remove time penalties from the reported result.
+            return mSolve.getExactTime()
+                   - mSolve.getPenalties().getTimePenalty();
+        }
+
         return mSolveStartedAt == NEVER ? 0
                : mSolveStoppedAt == NEVER ?
                    mMarkedAt == NEVER ? 0 : mMarkedAt - mSolveStartedAt
@@ -709,8 +858,8 @@ public class TimerState implements Parcelable {
      * penalties (if any), but it does not include any elapsed inspection
      * time. If a solve attempt was stopped with a DNF because the inspection
      * period timed out, then the "+2" penalty incurred in the 2-second
-     * overrun before the time-out will be the only component of the reported
-     * result time.
+     * overrun before the inspection period time-out will be the only component
+     * of the reported result time.
      * </p>
      * <p>
      * If the solve timer has not been started, or if the timer has started
@@ -719,6 +868,17 @@ public class TimerState implements Parcelable {
      * total. If the solve timer has started and has not yet stopped, the
      * elapsed solve time component of the total is calculated with respect
      * to the most recent current time instant recorded by {@link #mark(long)}.
+     * </p>
+     * <p>
+     * If the solve timer has been stopped and {@link #getSolve()} reports a
+     * non-{@code null} {@code Solve} instance, then the result time is taken
+     * from {@link Solve#getExactTime()}. Therefore, if the solve is edited
+     * after the timer is stopped and {@link PuzzleTimer#onSolveChanged(Solve)}
+     * is notified, the timer will update the solve referenced by this timer
+     * state and that updated solve reference will be used as the source of the
+     * result time value when it is accessed from the resulting call-back to
+     * {@link OnTimerEventListener#onTimerSet(TimerState)}. This makes it easy
+     * to keep the display of the timer up-to-date when edits are made.
      * </p>
      * <p>
      * A DNF penalty does not change the the calculation of the result time.
@@ -735,15 +895,21 @@ public class TimerState implements Parcelable {
      * </p>
      *
      * @return
-     *     The result time in milliseconds. The value is not rounded or
-     *     truncated, so it maintains its millisecond precision.
-     *     {@code WCAMath#roundResult(long)} may be used to round the value
-     *     to an "official" time. However, the result time reported by this
-     *     method is the time that should be recorded in the database, as the
-     *     rounding should be applied only for presentation purposes, or
-     *     prior to calculating average-of-N times or mean times.
+     *     The result time in milliseconds. The value <i>includes</i> any time
+     *     penalties. The value is not rounded or truncated, so it maintains
+     *     its millisecond precision. {@code WCAMath#roundResult(long)} may be
+     *     used to round the value to an "official" time. However, the result
+     *     time reported by this method is the time that should be recorded in
+     *     the database, as the rounding should be applied only for presentation
+     *     purposes, or prior to calculating average-of-N times or mean times.
      */
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
     public long getResultTime() {
+        if (isStopped() && mSolve != null) {
+            return mSolve.getExactTime(); // Already includes penalties.
+        }
+
         return getElapsedSolveTime() + mPenalties.getTimePenalty();
     }
 
@@ -761,7 +927,9 @@ public class TimerState implements Parcelable {
      *     {@code false} if there is no inspection period and only solve timer
      *     will be active.
      */
-    boolean isHoldToStartEnabled() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public boolean isHoldToStartEnabled() {
         return mIsHoldToStartEnabled;
     }
 
@@ -775,7 +943,9 @@ public class TimerState implements Parcelable {
      *     {@code false} if there is no inspection period and only solve timer
      *     will be active.
      */
-    boolean isInspectionEnabled() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public boolean isInspectionEnabled() {
         return mInspDuration > 0;
     }
 
@@ -791,7 +961,9 @@ public class TimerState implements Parcelable {
      *
      * @return The elapsed inspection time in milliseconds.
      */
-    long getElapsedInspectionTime() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public long getElapsedInspectionTime() {
         return mInspStartedAt == NEVER ? 0
                : mInspStoppedAt == NEVER ?
                     mMarkedAt == NEVER ? 0 : mMarkedAt - mInspStartedAt
@@ -815,7 +987,9 @@ public class TimerState implements Parcelable {
      *     The remaining normal inspection time in milliseconds; negative if
      *     the inspection period has been overrun.
      */
-    long getRemainingInspectionTime() {
+    // Needs to be public to support alternatives to "TimerView".
+    @SuppressWarnings("WeakerAccess")
+    public long getRemainingInspectionTime() {
         if (mInspStartedAt != NEVER) {
             // Inspection has already started and may or may not already be
             // stopped.
@@ -866,8 +1040,8 @@ public class TimerState implements Parcelable {
      *
      * @return This timer state, for convenience.
      */
-   @NonNull
-   TimerState mark(long now) {
+    @NonNull
+    TimerState mark(long now) {
         mMarkedAt = now;
         return this;
     }
@@ -980,12 +1154,11 @@ public class TimerState implements Parcelable {
      * inspection countdown reaches zero.
      *
      * @param now
-     *     The current instant in time. If the inspection period timed out,
-     *     passing {@code now} as -1 will automatically set the stopped time
-     *     to exactly the normal inspection duration plus the overrun
-     *     inspection duration after the original started time. This will
-     *     correct for any inaccuracies in the scheduling of the notification
-     *     of the stop instant.
+     *     The current instant in time. If the inspection period timed out, pass
+     *     {@code now} as -1 to automatically set the stop time and give a total
+     *     elapsed inspection time that is exactly the normal inspection time
+     *     plus the overrun duration. This corrects for any inaccuracies in the
+     *     scheduling of the notification of the stop instant.
      *
      * @return This timer state, for convenience.
      *
@@ -1021,6 +1194,9 @@ public class TimerState implements Parcelable {
         final String sStop = mSolveStoppedAt == NEVER
             ? "never" : String.format(Locale.US, "%,d", mSolveStoppedAt);
 
+        // Use the "getter" methods for the elapsed solve time and penalties,
+        // as they will be taken from "mSolve", which may be updated after the
+        // timer has stopped.
         if (isInspectionEnabled()) {
             final String iStart = mInspStartedAt == NEVER
                 ? "never" : String.format(Locale.US, "%,d", mInspStartedAt);
@@ -1032,16 +1208,17 @@ public class TimerState implements Parcelable {
                 + " s0=%s; s1=%s; se=%,d; sp=+2x%d%s; rp=%,d}", mStage.name(),
                 iStart, iStop, mInspDuration,
                 getRemainingInspectionTime(), getElapsedInspectionTime(),
-                mPenalties.getPreStartPlusTwoCount(),
-                mPenalties.hasPreStartDNF() ? "+DNF" : "", sStart, sStop,
-                getElapsedSolveTime(), mPenalties.getPostStartPlusTwoCount(),
-                mPenalties.hasPostStartDNF() ? "+DNF" : "", mRefreshPeriod);
+                getPenalties().getPreStartPlusTwoCount(),
+                getPenalties().hasPreStartDNF() ? "+DNF" : "", sStart, sStop,
+                getElapsedSolveTime(),
+                getPenalties().getPostStartPlusTwoCount(),
+                getPenalties().hasPostStartDNF() ? "+DNF" : "", mRefreshPeriod);
         }
 
         return String.format(Locale.US,
             "%s{s0=%s; s1=%s; se=%,d; sp=+2x%d%s; rp=%,d}",
             mStage.name(), sStart, sStop, getElapsedSolveTime(),
-            mPenalties.getPostStartPlusTwoCount(),
-            mPenalties.hasPostStartDNF() ? "+DNF" : "", mRefreshPeriod);
+            getPenalties().getPostStartPlusTwoCount(),
+            getPenalties().hasPostStartDNF() ? "+DNF" : "", mRefreshPeriod);
     }
 }

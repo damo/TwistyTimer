@@ -12,66 +12,72 @@ import com.aricneto.twistytimer.items.PuzzleType;
 
 /**
  * <p>
- * The main state information for the application that is persisted when the application is
- * restarted. The fields of the main state are limited to those required to access solve times in
- * the database for the saving of new solve times and the presentation of statistics and charts
- * showing solve time data. As such, the {@link MainActivity} and its various fragments nearly
- * all require all of this main state information and it must be synchronised across all of those
- * components.
+ * The main state information for the application that is persisted when the
+ * application is restarted. The fields of the main state are limited to
+ * those required to access solve times in the database for the saving of new
+ * solve times and the presentation of statistics and charts showing solve
+ * time data. As such, the {@link MainActivity} and its various fragments
+ * nearly all require all of this main state information and it must be
+ * synchronised across all of those components.
  * </p>
  * <p>
- * There are other persistent values, such as the theme, puzzle color scheme and other values from
- * the {@link SettingsActivity}, but those values are not treated as main state. They are persisted
- * and accessed separately, typically through the {@link Prefs} utility class.
+ * There are other persistent values, such as the theme, puzzle color scheme
+ * and other values from the {@link SettingsActivity}, but those values are
+ * not treated as main state. They are persisted and accessed separately,
+ * typically through the {@link Prefs} utility class.
  * </p>
  * <p>
- * The {@code MainActivity} is responsible for maintaining the main state, persisting it when
- * required, and notifying its fragments of any changes. It also provides an accessor that the
- * fragments can use to retrieve the sate. While the user interface elements that change the main
- * state may be managed by other fragments, these fragments must notify the activity of these
- * changes and wait for notification of the change before applying the changes to their own
- * elements.
+ * The {@code MainActivity} is responsible for maintaining the main state,
+ * persisting it when required, and notifying its fragments of any changes.
+ * It also provides an accessor that the fragments can use to retrieve the
+ * sate. While the user interface elements that change the main state may be
+ * managed by other fragments, these fragments must notify the activity of
+ * these changes and wait for notification of the change before applying the
+ * changes to their own elements.
  * </p>
  * <p>
- * The {@code Parcelable} interface makes it easy to persist the main state in the saved instance
- * state, to pass it via local broadcast {@code Intent}s, or to pass it in fragment or loader
- * argument bundles, if necessary. Immutability makes it safer to pass references to other
- * fragments without concerns that the fragments will change the state inadvertently and affect
+ * The {@code Parcelable} interface makes it easy to persist the main state
+ * in the saved instance state, to pass it via local broadcast {@code Intent}s,
+ * or to pass it in fragment or loader argument bundles, if necessary.
+ * Immutability makes it safer to pass references to other fragments without
+ * concerns that the fragments will change the state inadvertently and affect
  * other components that hold a reference to the same object.
  * </p>
  * <p>
- * An {@link #equals(Object)} method allows the {@code MainActivity} to determine if a notification
- * of a change originating from a fragment is any different from the current state. If there is no
- * difference, then the "change" does not need to be notified to any other components.
+ * An {@link #equals(Object)} method allows the {@code MainActivity} to
+ * determine if a notification of a change originating from a fragment is any
+ * different from the current state. If there is no difference, then the
+ * "change" does not need to be notified to any other components.
  * </p>
  * <p>
- * A custom {@link #toString()} method supports simpler logging and debugging of the main state.
+ * A custom {@link #toString()} method supports simpler logging and debugging
+ * of the main state.
  * </p>
  *
  * @author damo
  */
 public class MainState implements Parcelable {
     /**
-     * The built-in solve category that applies before any other solve category is created or
-     * selected.
+     * The built-in solve category that applies before any other solve
+     * category is created or selected.
      */
-    public static final String CATEGORY_NORMAL = "Normal";
+    private static final String CATEGORY_NORMAL = "Normal";
 
     /**
-     * The default puzzle type to use in the absence of any previously saved puzzle type being
-     * available.
+     * The default puzzle type to use in the absence of any previously saved
+     * puzzle type being available.
      */
     public static final PuzzleType DEFAULT_PUZZLE_TYPE = PuzzleType.TYPE_333;
 
     /**
-     * The default solve category to use in the absence of any previously saved puzzle type being
-     * available for the known puzzle type.
+     * The default solve category to use in the absence of any previously
+     * saved puzzle type being available for the known puzzle type.
      */
     public static final String DEFAULT_SOLVE_CATEGORY = CATEGORY_NORMAL;
 
     /**
-     * The default setting of the "history" switch in the absence of any previously saved setting
-     * being available.
+     * The default setting of the "history" switch in the absence of any
+     * previously saved setting being available.
      */
     public static final boolean DEFAULT_IS_HISTORY_ENABLED = false;
 
@@ -111,19 +117,20 @@ public class MainState implements Parcelable {
      * Creates a new holder for the main state information.
      *
      * @param puzzleType
-     *     The currently selected puzzle type. A non-{@code null} default value must be used if
-     *     no puzzle type has been explicitly selected.
+     *     The currently selected puzzle type. A non-{@code null} default
+     *     value must be used if no puzzle type has been explicitly selected.
      * @param solveCategory
-     *     The currently selected solve category. A non-{@code null} default value must be used
-     *     if no solve category has been explicitly selected.
+     *     The currently selected solve category. A non-{@code null} default
+     *     value must be used if no solve category has been explicitly selected.
      * @param isHistoryEnabled
-     *     {@code true} if the viewing of the full history of all solve times has been enabled;
-     *     or {@code false} it is is not enabled.
+     *     {@code true} if the viewing of the full history of all solve times
+     *     has been enabled; or {@code false} it is is not enabled.
      */
-    public MainState(@NonNull PuzzleType puzzleType, @NonNull CharSequence solveCategory,
+    public MainState(@NonNull PuzzleType puzzleType,
+                     @NonNull CharSequence solveCategory,
                      boolean isHistoryEnabled) {
         mPuzzleType       = puzzleType;
-        mSolveCategory    = solveCategory.toString(); // *Must* store an *immutable* "String".
+        mSolveCategory    = solveCategory.toString(); // As *immutable* String.
         mIsHistoryEnabled = isHistoryEnabled;
     }
 
@@ -133,7 +140,9 @@ public class MainState implements Parcelable {
      * @param in The parcel containing the state information.
      */
     protected MainState(Parcel in) {
-        this(PuzzleType.forTypeName(in.readString()), in.readString(), in.readByte() != 0);
+        this(PuzzleType.forTypeName(in.readString()),
+            in.readString(),
+            in.readByte() != 0);
     }
 
     /**
@@ -160,19 +169,20 @@ public class MainState implements Parcelable {
      * Indicates if the "history" switch is (or should be) enabled.
      *
      * @return
-     *    {@code true} if the history switch is/should be checked; or {@code false} if the switch
-     *    is/should be unchecked.
+     *    {@code true} if the history switch is/should be checked; or
+     *    {@code false} if the switch is/should be unchecked.
      */
     public boolean isHistoryEnabled() {
         return mIsHistoryEnabled;
     }
 
     /**
-     * Saves this main state to a bundle. This is convenient when saving instance state for an
-     * application component. The same key is always used to identify the state, so only one
-     * instance of {@code MainState} can be saved to any one {@code Bundle}. The saved state should
-     * be restored using {@link #restoreFromBundle(Bundle)}, as it will identify the state saved
-     * by this method.
+     * Saves this main state to a bundle. This is convenient when saving
+     * instance state for an application component. The same key is always
+     * used to identify the state, so only one instance of {@code MainState}
+     * can be saved to any one {@code Bundle}. The saved state should be
+     * restored using {@link #restoreFromBundle(Bundle)}, as it will identify
+     * the state saved by this method.
      *
      * @param bundle The bundle to which to save the state.
      * @return The given bundle.
@@ -184,18 +194,21 @@ public class MainState implements Parcelable {
     }
 
     /**
-     * Restores an instance of the main state from a bundle. This is convenient when restoring
-     * instance state for an application component. The same key is always used to identify the
-     * state, so only one instance of {@code MainState} can be saved to any one {@code Bundle}.
-     * The restored state should be saved previously using {@link #saveToBundle(Bundle)}, so that
-     * it can be identified by this method.
+     * Restores an instance of the main state from a bundle. This is convenient
+     * when restoring instance state for an application component. The same key
+     * is always used to identify the state, so only one instance of
+     * {@code MainState} can be saved to any one {@code Bundle}. The restored
+     * state should be saved previously using {@link #saveToBundle(Bundle)}, so
+     * that it can be identified by this method.
      *
      * @param bundle
-     *     The bundle from which to restore the state. If {@code null} no state can be restored.
+     *     The bundle from which to restore the state. If {@code null} no state
+     *     can be restored.
      *
      * @return
-     *     The restored main state; or {@code null} if the bundle is {@code null}, or if the bundle
-     *     contained no identifiable saved main state.
+     *     The restored main state; or {@code null} if the bundle is
+     *     {@code null}, or if the bundle contained no identifiable saved
+     *     main state.
      */
     public static MainState restoreFromBundle(@Nullable Bundle bundle) {
         if (bundle != null && bundle.containsKey(BUNDLE_KEY)) {
@@ -205,48 +218,55 @@ public class MainState implements Parcelable {
     }
 
     /**
-     * Indicates if this main state is equal to another object. The main state is only equal if it
-     * is also a main state object with the same state values.
+     * Indicates if this main state is equal to another object. The main state
+     * is only equal if it is also a main state object with the same state
+     * values.
      *
      * @param obj
      *     The object to be compared to this main state.
      *
      * @return
-     *     {@code true} if the object is equal to this main state; or {@code false} if it is not
-     *     equal.
+     *     {@code true} if the object is equal to this main state; or
+     *     {@code false} if it is not equal.
      */
-    // Parameter class check is done in "equalsIgnoreHistory" on behalf of this method.
-    @SuppressWarnings("EqualsWhichDoesntCheckParameterClass")
     @Override
     public boolean equals(Object obj) {
-        return equalsIgnoreHistory(obj)
-                && ((MainState) obj).isHistoryEnabled() == isHistoryEnabled();
+        return
+            this == obj
+            || (obj instanceof MainState
+                && equalsIgnoreHistory(obj)
+                && ((MainState) obj).isHistoryEnabled() == isHistoryEnabled());
     }
 
     /**
-     * Indicates if this main state is equal to another object, ignoring the value of the
-     * {@link #isHistoryEnabled()} state. The main state is only equal if it is also a main state
-     * object with the same state values, history excluded. This comparison is useful for some
-     * cases, such as loading statistics, where changes to the history status is not relevant.
+     * Indicates if this main state is equal to another object, ignoring the
+     * value of the {@link #isHistoryEnabled()} value. Equality is determined
+     * as for {@link #equals(Object)}, but the "history" flag is ignored. This
+     * comparison is useful for some cases, such as loading statistics, where
+     * changes to the history status may not be relevant.
      *
      * @param obj
      *     The object to be compared to this main state.
      *
      * @return
-     *     {@code true} if the object is equal to this main state in all respects except for the
-     *     history status (which is not compared); or {@code false} if it is not equal.
+     *     {@code true} if the object is equal to this main state in all
+     *     respects except for the history flag (which is not compared); or
+     *     {@code false} if it is not equal.
      */
     public boolean equalsIgnoreHistory(Object obj) {
-        return this == obj
-                || (obj instanceof MainState
-                    && ((MainState) obj).getPuzzleType() == getPuzzleType()
-                    && ((MainState) obj).getSolveCategory().equals(getSolveCategory()));
+        return
+            this == obj
+            || (obj instanceof MainState
+                && ((MainState) obj).getPuzzleType() == getPuzzleType()
+                && ((MainState) obj).getSolveCategory()
+                                    .equals (getSolveCategory()));
     }
 
     /**
-     * Gets the hash code for this main state. The hash code is consistent with {@code equals}:
-     * if two {@code MainState} objects are equal, they will have the same hash code; however, if
-     * two {@code MainState} objects have the same hash code, they are not necessarily equal.
+     * Gets the hash code for this main state. The hash code is consistent with
+     * {@code equals}: if two {@code MainState} objects are equal, they will
+     * have the same hash code; however, if two {@code MainState} objects have
+     * the same hash code, they are not necessarily equal.
      *
      * @return The hash code.
      */
@@ -265,16 +285,18 @@ public class MainState implements Parcelable {
     }
 
     /**
-     * Gets a string representation of this main state. This is intended only to support simple
-     * debugging and logging tasks.
+     * Gets a string representation of this main state. This is intended only
+     * to support simple debugging and logging tasks.
      *
      * @return A string representation of the state.
      */
     @Override
     public String toString() {
         if (mAsString == null) {
-            mAsString = getClass().getSimpleName() + "[type=" + mPuzzleType.typeName()
-                    + ", category=" + getSolveCategory() + ", history=" + mIsHistoryEnabled + ']';
+            mAsString = getClass().getSimpleName()
+                        + "[type=" + mPuzzleType.typeName()
+                        + ", category=" + getSolveCategory()
+                        + ", history=" + mIsHistoryEnabled + ']';
         }
 
         return mAsString;
@@ -283,21 +305,23 @@ public class MainState implements Parcelable {
     /**
      * Writes the state information to a parcel.
      *
-     * @param dest  The destination parcel to which to add the state information.
-     * @param flags Ignored.
+     * @param dest
+     *     The destination parcel to which to add the state information.
+     * @param flags
+     *     Ignored.
      */
     @Override
     public void writeToParcel(Parcel dest, int flags) {
-        // Could use "name()" but "typeName()" will be more consistent with the database and
-        // preferences, so it may avoid confusion.
+        // Could use "name()" but "typeName()" will be more consistent with the
+        // database and preferences, so it may avoid confusion.
         dest.writeString(mPuzzleType.typeName());
         dest.writeString(mSolveCategory);
         dest.writeByte((byte) (mIsHistoryEnabled ? 1 : 0));
     }
 
     /**
-     * Describes the kinds of special objects in this {@code Parcelable}. There are no "special
-     * objects" (e.g., file descriptors).
+     * Describes the kinds of special objects in this {@code Parcelable}. There
+     * are no "special objects" (e.g., file descriptors).
      *
      * @return Always zero: no special objects.
      */
@@ -307,8 +331,8 @@ public class MainState implements Parcelable {
     }
 
     /**
-     * {@code CREATOR} factory to satisfy the canonical Android {@code Parcelable} implementation
-     * pattern.
+     * {@code CREATOR} factory to satisfy the canonical Android
+     * {@code Parcelable} implementation pattern.
      */
     public static final Creator<MainState> CREATOR = new Creator<MainState>() {
         @Override

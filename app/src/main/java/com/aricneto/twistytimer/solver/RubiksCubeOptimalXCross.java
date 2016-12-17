@@ -17,22 +17,22 @@ public class RubiksCubeOptimalXCross implements Tip {
 
     static {
         x = new State(
-                new byte[] { 3, 2, 6, 7, 0, 1, 5, 4 },
-                new byte[] { 2, 1, 2, 1, 1, 2, 1, 2 },
+                new byte[] { 3, 2, 6,  7, 0, 1,  5, 4 },
+                new byte[] { 2, 1, 2,  1, 1, 2,  1, 2 },
                 new byte[] { 7, 5, 9, 11, 6, 2, 10, 3, 4, 1, 8, 0 },
-                new byte[] { 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0 });
+                new byte[] { 0, 0, 0,  0, 1, 0,  1, 0, 1, 0, 1, 0 });
 
         y = new State(
                 new byte[] { 3, 0, 1, 2, 7, 4, 5, 6 },
                 new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 },
                 new byte[] { 3, 0, 1, 2, 7, 4, 5, 6, 11, 8, 9, 10 },
-                new byte[] { 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0 });
+                new byte[] { 1, 1, 1, 1, 0, 0, 0, 0,  0, 0, 0,  0 });
 
         z = new State(
-                new byte[] { 4, 0, 3, 7, 5, 1, 2, 6 },
-                new byte[] { 1, 2, 1, 2, 2, 1, 2, 1 },
+                new byte[] { 4, 0, 3,  7, 5, 1, 2,  6 },
+                new byte[] { 1, 2, 1,  2, 2, 1, 2,  1 },
                 new byte[] { 8, 4, 6, 10, 0, 7, 3, 11, 1, 5, 2, 9 },
-                new byte[] { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 });
+                new byte[] { 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1, 1 });
     }
 
     @Override

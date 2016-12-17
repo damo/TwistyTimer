@@ -13,11 +13,12 @@
     tools:context="com.aricneto.twistytimer.fragment.TimerFragment">
 
     <!--
-    Enable "android:animateLayoutChanges", so that the quick-action buttons, statistics, hints,
-    etc. will fade in and out nicely when their visibility is changed. It saves a lot of coding.
-    Beware that if a view goes from "GONE" to "INVISIBLE" the transition may be animated! To avoid
-    this, just use "VISIBLE" and "INVISIBLE" here in the layout and in the code, unless there is a
-    real need to use "GONE".
+    Enable "android:animateLayoutChanges", so that the quick-action buttons,
+    statistics, hints, etc. will fade in and out nicely when their visibility
+    is changed. It saves a lot of coding. Beware that if a view goes from "GONE"
+    to "INVISIBLE" the transition may be animated! To avoid this, just use
+    "VISIBLE" and "INVISIBLE" here in the layout and in the code, unless there
+    is a real need to use "GONE".
     -->
     <RelativeLayout
         android:id="@+id/root"
@@ -26,7 +27,9 @@
         android:background="?mainColorBackground"
         android:animateLayoutChanges="true">
 
-        <!-- The animated background shown when a personal best time is achieved. -->
+        <!--
+        The animated background shown when a personal best time is achieved.
+        -->
         <com.skyfishjy.library.RippleBackground
             android:id="@+id/ripple_background"
             android:layout_width="match_parent"
@@ -39,15 +42,17 @@
             app:rb_scale="10" />
 
         <!--
-        A proxy view that provides touch input to the "TimerWidget". This (nearly) full screen
-        view will relay touch inputs to the timer making starting and (more importantly) stopping
-        the timer much easier. This view is defined early, to ensure that it is "underneath" the
-        foreground views and does not capture touches intended for those other views.
+        A proxy view that provides touch input to the "TimerView". This (nearly)
+        full screen view will relay touch inputs to the timer making starting
+        and (more importantly) stopping the timer much easier. This view is
+        defined early, to ensure that it is "underneath" the foreground views
+        and does not capture touches intended for those other views.
 
-        The dimension "timer_touch_proxy_margin" will be applied in code when the timer is not
-        running to pass through touch events when the user is (probably) only trying to open the
-        side drawer menu. When the timer is running, all touch events will be intercepted, so
-        touching the side of the screen will still stop the timer.
+        The dimension "timer_touch_proxy_margin" will be applied in code when
+        the timer is not running to pass through touch events when the user is
+        (probably) only trying to open the side drawer menu. When the timer is
+        running, all touch events will be intercepted, so touching the side of
+        the screen will still stop the timer.
         -->
         <FrameLayout
             android:id="@+id/timer_touch_proxy"
@@ -55,15 +60,17 @@
             android:layout_height="match_parent" />
 
         <!--
-        The layout for the cross-hints panel and the scramble text view are very different between
-        landscape and portrait orientations. There is no nice way to include them from their "merge"
-        element and set the required "RelativeLayout" attributes on this "include" element, so the
-        attributes are set within the included file. This is harder to maintain, but is unavoidable.
+        The layout for the cross-hints panel and the scramble text view are very
+        different between landscape and portrait orientations. There is no nice
+        way to include them from their "merge" element and set the required
+        "RelativeLayout" attributes on this "include" element, so the attributes
+        are set within the included file. This is harder to maintain, but is
+        unavoidable.
         -->
         <include
             layout="@layout/fragment_timer_x_hints_and_scramble" />
 
-        <com.aricneto.twistytimer.timer.TimerWidget
+        <com.aricneto.twistytimer.timer.TimerView
             android:id="@+id/timer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -104,9 +111,10 @@
             tools:visibility="visible">
 
             <!--
-            The quick-action buttons may show icons or text. There is a user preference to show
-            larger buttons. The default icon size is 24x24 dp and the larger icon size is 36x36 dp.
-            Setting the text size to 18 dp and 27 dp respectively gives acceptable results.
+            The quick-action buttons may show icons or text. There is a user
+            preference to show larger buttons. The default icon size is 24x24 dp
+            and the larger icon size is 36x36 dp. Setting the text size to 18 dp
+            and 27 dp respectively gives acceptable results.
             -->
             <ImageView
                 android:id="@+id/button_delete"
@@ -173,8 +181,9 @@
         </LinearLayout>
 
         <!--
-        The layout of the session statistics is 2-column for portrait and 1-column for landscape,
-        so a separate layout is defined for each orientation and included here.
+        The layout of the session statistics is 2-column for portrait and
+        1-column for landscape, so a separate layout is defined for each
+        orientation and included here.
         -->
         <include
             layout="@layout/fragment_timer_stats"

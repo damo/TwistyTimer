@@ -102,7 +102,7 @@ enum TimerStage {
     // start time can be recorded, as this stage is only entered once per
     // solve attempt, whereas "INSPECTION_STARTED" can be entered several
     // times (if "INSPECTION_SOLVE_HOLDING_FOR_START" is aborted).
-    INSPECTION_STARTING,
+//    INSPECTION_STARTING,
 
     /**
      * <p>
@@ -254,7 +254,7 @@ enum TimerStage {
      * of the elapsed time, so that it can update the timer display.
      * </p>
      */
-    SOLVE_STARTING,
+//    SOLVE_STARTING,
 
     /**
      * <p>

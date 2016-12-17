@@ -13,29 +13,36 @@ import com.aricneto.twistytimer.stats.Statistics;
 import java.util.Map;
 
 /**
- * Utility methods for managing puzzle types, formatting solve times and sharing solve statistics.
+ * Utility methods for managing puzzle types, formatting solve times and
+ * sharing solve statistics.
  */
 public final class PuzzleUtils {
     /**
-     * Formats the details of the most recent average-of-N calculation for times recorded in the
-     * current session. The string shows the average value and the list of times that contributed
-     * to the calculation of that average. If the average calculation requires the elimination of
+     * Formats the details of the most recent average-of-N calculation for
+     * times recorded in the current session. The string shows the average
+     * value and the list of times that contributed to the calculation of
+     * that average. If the average calculation requires the elimination of
      * the best and worst times, these times are shown in parentheses.
      *
-     * @param n     The value of "N" for which the "average-of-N" is required.
-     * @param stats The statistics from which to get the details of the average calculation.
+     * @param n
+     *     The value of "N" for which the "average-of-N" is required.
+     * @param stats
+     *     The statistics from which to get the details of the average
+     *     calculation.
      *
      * @return
-     *     The average-of-N in string format; or {@code null} if there is no average calculated for
-     *     that value of "N", or if insufficient (less than "N") times have been recorded in the
-     *     current session, of if {@code stats} is {@code null}.
+     *     The average-of-N in string format; or {@code null} if there is no
+     *     average calculated for that value of "N", or if insufficient (less
+     *     than "N") times have been recorded in the current session, of if
+     *     {@code stats} is {@code null}.
      */
     private static String formatAverageOfN(int n, Statistics stats) {
         if (stats == null || stats.getAverageOf(n, true) == null) {
             return null;
         }
 
-        final AverageCalculator.AverageOfN aoN = stats.getAverageOf(n, true).getAverageOfN();
+        final AverageCalculator.AverageOfN aoN
+            = stats.getAverageOf(n, true).getAverageOfN();
         final long[] times = aoN.getTimes();
         final long average = aoN.getAverage();
 
@@ -43,14 +50,16 @@ public final class PuzzleUtils {
             return null;
         }
 
-        final StringBuilder s = new StringBuilder(TimeUtils.formatTimeStatistic(average));
+        final StringBuilder s
+            = new StringBuilder(TimeUtils.formatTimeStatistic(average));
 
         s.append(" = ");
 
         for (int i = 0; i < n; i++) {
             final String time = TimeUtils.formatTimeStatistic(times[i]);
 
-            // The best and worst indices may be -1, but that is OK: they just will not be marked.
+            // The best and worst indices may be -1, but that is OK: they just
+            // will not be marked.
             if (i == aoN.getBestTimeIndex() || i == aoN.getWorstTimeIndex()) {
                 s.append('(').append(time).append(')');
             } else {
@@ -73,23 +82,28 @@ public final class PuzzleUtils {
      * @param stats
      *     The statistics that contain the required details about the average.
      * @param activityContext
-     *     An activity context required to start the sharing activity. An application context is
-     *     not appropriate, as using it may disrupt the task stack.
+     *     An activity context required to start the sharing activity. An
+     *     application context is not appropriate, as using it may disrupt the
+     *     task stack.
      *
      * @return
-     *     {@code true} if it is possible to share the average; or {@code false} if it is not.
+     *     {@code true} if it is possible to share the average; or {@code false}
+     *     if it is not.
      */
     public static boolean shareAverageOf(
-            int n, @NonNull Statistics stats, @NonNull Activity activityContext) {
+            int n, @NonNull Statistics stats,
+            @NonNull Activity activityContext) {
 
         final String averageOfN = formatAverageOfN(n, stats);
 
         if (averageOfN != null) {
             final Intent shareIntent = new Intent();
-            final String puzzleName = stats.getMainState().getPuzzleType().getShortName();
+            final String puzzleName
+                = stats.getMainState().getPuzzleType().getShortName();
 
             shareIntent.setAction(Intent.ACTION_SEND);
-            shareIntent.putExtra(Intent.EXTRA_TEXT, puzzleName + ": " + formatAverageOfN(n, stats));
+            shareIntent.putExtra(Intent.EXTRA_TEXT,
+                puzzleName + ": " + formatAverageOfN(n, stats));
             shareIntent.setType("text/plain");
             activityContext.startActivity(shareIntent);
 
@@ -105,24 +119,27 @@ public final class PuzzleUtils {
      * @param solve
      *     The solve time to be shared.
      * @param activityContext
-     *     An activity context required to start the sharing activity. An application context is
-     *     not appropriate, as using it may disrupt the task stack.
+     *     An activity context required to start the sharing activity. An
+     *     application context is not appropriate, as using it may disrupt the
+     *     task stack.
      *
      * @return
-     *     {@code true} if the solve was shared successfully; or {@code false} if it was not.
+     *     {@code true} if the solve was shared successfully; or {@code false}
+     *     if it was not.
      */
-    public static boolean shareSolveTime(@NonNull Solve solve, @NonNull Activity activityContext) {
+    public static boolean shareSolveTime(@NonNull Solve solve,
+                                         @NonNull Activity activityContext) {
         final Intent shareIntent = new Intent();
         final String puzzleName = solve.getPuzzleType().getShortName();
 
         shareIntent.setAction(Intent.ACTION_SEND);
         shareIntent.putExtra(Intent.EXTRA_TEXT,
-                puzzleName + ": "
-                        + TimeUtils.formatTimeStatistic(solve.getTime()) + "s."
-                        + (solve.hasComment()  ? "\n" : "")
-                        + solve.getComment()    // empty if not present
-                        + (solve.hasScramble() ? "\n" : "")
-                        + solve.getScramble()); // empty if not present
+            puzzleName + ": "
+            + TimeUtils.formatTimeStatistic(solve.getTime()) + "s."
+            + (solve.hasComment()  ? "\n" : "")
+            + solve.getComment()    // empty if not present
+            + (solve.hasScramble() ? "\n" : "")
+            + solve.getScramble()); // empty if not present
         shareIntent.setType("text/plain");
         activityContext.startActivity(shareIntent);
 
@@ -130,33 +147,39 @@ public final class PuzzleUtils {
     }
 
     /**
-     * Shares a histogram showing the frequency of solve times falling into intervals of one
-     * second. Only times for the current session are presented in the histogram.
+     * Shares a histogram showing the frequency of solve times falling into
+     * intervals of one second. Only times for the current session are presented
+     * in the histogram.
      *
      * @param stats
-     *     The statistics that contain the required details to present the histogram. If
-     *     {@code null}, no statistics will be shared.
+     *     The statistics that contain the required details to present the
+     *     histogram. If {@code null}, no statistics will be shared.
      * @param activityContext
-     *     An activity context required to start the sharing activity. An application context is
-     *     not appropriate, as using it may disrupt the task stack.
+     *     An activity context required to start the sharing activity. An
+     *     application context is not appropriate, as using it may disrupt the
+     *     task stack.
      *
      * @return
-     *     {@code true} if it is possible to share the histogram; or {@code false} if it is not.
+     *     {@code true} if it is possible to share the histogram; or
+     *     {@code false} if it is not.
      */
     public static boolean shareHistogram(
             @Nullable Statistics stats, @NonNull Activity activityContext) {
 
-        final int solveCount = stats != null ? stats.getSessionNumSolves() : 0; // Includes DNFs.
+        // Count includes DNFs.
+        final int solveCount = stats != null ? stats.getSessionNumSolves() : 0;
 
         if (solveCount > 0) {
             final Intent shareIntent = new Intent();
-            final String puzzleName = stats.getMainState().getPuzzleType().getShortName();
+            final String puzzleName
+                = stats.getMainState().getPuzzleType().getShortName();
 
             shareIntent.setAction(Intent.ACTION_SEND);
             shareIntent.putExtra(Intent.EXTRA_TEXT,
-                    activityContext.getString(
-                            R.string.fab_share_histogram_solvecount, puzzleName, solveCount)
-                            + ":" + createHistogram(stats));
+                activityContext.getString(
+                    R.string.fab_share_histogram_solvecount,
+                    puzzleName, solveCount)
+                + ":" + createHistogram(stats));
             shareIntent.setType("text/plain");
             activityContext.startActivity(shareIntent);
 
@@ -167,41 +190,43 @@ public final class PuzzleUtils {
     }
 
     /**
-     * Creates a histogram of the frequencies of solve times for the current session. Times are
-     * truncated to whole seconds.
+     * Creates a histogram of the frequencies of solve times for the current
+     * session. Times are truncated to whole seconds.
      *
      * @param stats
      *     The statistics from which to get the frequencies.
      *
      * @return
-     *     A multi-line string presenting the histogram using "ASCII art"; or an empty string if
-     *     no times have been recorded.
+     *     A multi-line string presenting the histogram using "ASCII art"; or
+     *     an empty string if no times have been recorded.
      */
     private static String createHistogram(@NonNull Statistics stats) {
         final StringBuilder histogram = new StringBuilder(1_000);
         final Map<Long, Integer> timeFreqs = stats.getSessionTimeFrequencies();
 
-        // Iteration order starts with "DNF" and then goes by increasing time. Use a fixed-width
-        // field for the time, right justified, assuming that the "bucket" time will be no greater
-        // than 9:59:59 (7 characters).
+        // Iteration order starts with "DNF" and then goes by increasing time.
+        // Use a fixed-width field for the time, right justified, assuming that
+        // the "bucket" time will be no greater than 9:59:59 (7 characters).
         for (Long time : timeFreqs.keySet()) {
             // "time" is already truncated to whole seconds, or is "TIME_DNF".
             histogram.append(
-                    String.format("\n%7s: %s",
-                            TimeUtils.formatTimeLoRes(time),      // 1-second (or DNF) time bucket.
-                            convertToBar(timeFreqs.get(time)))); // "Bar" for bucket's count.
+                String.format("\n%7s: %s",
+                    TimeUtils.formatTimeLoRes(time), // 1 s (or DNF) bucket.
+                    convertToBar(timeFreqs.get(time)))); // "Bar" for count.
         }
 
         return histogram.toString();
     }
 
     /**
-     * Creates a "bar" string containing a sequence of block ('█') characters to form the "bar".
-     * Used for histograms.
+     * Creates a "bar" string containing a sequence of block ('█') characters to
+     * form the "bar". Used for histograms.
      *
      * @param n The length (in characters) of the "bar".
      *
-     * @return A string containing the required number of block characters to form the "bar".
+     * @return
+     *     A string containing the required number of block characters to form
+     *     the "bar".
      */
     private static String convertToBar(int n) {
         final StringBuilder bar = new StringBuilder();

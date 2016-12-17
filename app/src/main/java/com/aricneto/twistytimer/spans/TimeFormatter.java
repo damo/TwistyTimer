@@ -15,7 +15,9 @@ public class TimeFormatter implements YAxisValueFormatter{
 
     @Override
     public String getFormattedValue(float value, YAxis yAxis) {
-        // Truncate the fractional time to whole milliseconds, then apply the WCA rounding.
-        return TimeUtils.formatTimeLoRes(WCAMath.roundResult((long) (value * 1_000L)));
+        // Truncate the fractional time to whole milliseconds, then apply the
+        // WCA rounding.
+        return TimeUtils.formatTimeLoRes(
+            WCAMath.roundResult((long) (value * 1_000L)));
     }
 }

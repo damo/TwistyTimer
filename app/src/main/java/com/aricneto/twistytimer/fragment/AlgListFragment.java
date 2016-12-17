@@ -31,9 +31,10 @@ import static com.aricneto.twistytimer.utils.TTIntent.CATEGORY_ALG_DATA_CHANGES;
 import static com.aricneto.twistytimer.utils.TTIntent.registerReceiver;
 import static com.aricneto.twistytimer.utils.TTIntent.unregisterReceiver;
 
-public class AlgListFragment extends BaseMainFragment implements LoaderManager.LoaderCallbacks<Cursor> {
+public class AlgListFragment extends BaseMainFragment
+       implements LoaderManager.LoaderCallbacks<Cursor> {
 
-    private static final String KEY_SUBSET     = "subset";
+    private static final String KEY_SUBSET = "subset";
 
     private Unbinder mUnbinder;
     @BindView(R.id.toolbar) Toolbar toolbar;

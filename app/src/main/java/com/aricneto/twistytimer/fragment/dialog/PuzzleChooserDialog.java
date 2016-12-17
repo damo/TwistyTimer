@@ -27,38 +27,44 @@ import butterknife.Unbinder;
 
 /**
  * <p>
- * A dialog fragment that chooses a the puzzle type and category. Once the desired options are
- * chosen this dialog relays the selection through the parent activity to the "consumer" fragment
- * that initiated this fragment. The "consumer" fragment is identified by its fragment tag, which
- * it passes to this chooser in {@link #newInstance(int, String)} and which this chooser passes
- * back to the activity, so the activity can find that "consumer" fragment.
+ * A dialog fragment that chooses a puzzle type and category. Once the desired
+ * options are chosen, the dialog relays the selection (via the parent activity)
+ * to the "consumer" fragment that initiated this fragment. The "consumer"
+ * fragment is identified by its fragment tag, which it passes to this chooser
+ * in {@link #newInstance(int, String)} and which this chooser passes back to
+ * the activity, so the activity can find that "consumer" fragment.
  * </p>
  * <p>
- * <i>This dialog fragment <b>must</b> be used in the context of an activity that implements the
- * {@link PuzzleCallback} interface, or exceptions will occur.</i>
+ * <i>This dialog fragment <b>must</b> be used in the context of an activity
+ * that implements the {@link PuzzleCallback} interface, or exceptions will
+ * occur.</i>
  * </p>
  */
 public class PuzzleChooserDialog extends DialogFragment {
     /**
-     * An interface that allows fragments to communicate changes to the selected puzzle type and/or
-     * category.
+     * An interface that allows fragments to communicate changes to the selected
+     * puzzle type and/or category. An activity implements this interface and
+     * relays the details from one fragment to the other. While a receiving
+     * fragment does not need to implement this interface, it makes the relay
+     * operation in the activity a bit simpler.
      */
     public interface PuzzleCallback {
         /**
-         * Notifies the listener that a new puzzle type and/or category have been selected.
+         * Notifies the listener that a new puzzle type and/or category have
+         * been selected.
          *
          * @param tag
-         *     The tag identifying the callback. When this interface is implemented by an activity
-         *     as a means of communication between two fragments, the tag should be the fragment
-         *     tag that identifies the fragment to which the activity should relay the message. The
-         *     receiving fragment should also (probably) implement this interface.
+         *     The tag identifying the callback. The tag should be the fragment
+         *     tag that identifies the fragment (known to the activity) to which
+         *     the activity should relay the message.
          * @param puzzleType
          *     The newly-selected puzzle type.
          * @param solveCategory
          *     The name of the newly-selected solve category.
          */
         void onPuzzleSelected(
-                @NonNull String tag, @NonNull PuzzleType puzzleType, @NonNull String solveCategory);
+            @NonNull String tag, @NonNull PuzzleType puzzleType,
+            @NonNull String solveCategory);
     }
 
     private Unbinder mUnbinder;
@@ -68,14 +74,15 @@ public class PuzzleChooserDialog extends DialogFragment {
     @BindView(R.id.selectButton)    TextView selectButton;
 
     /**
-     * The name of the fragment argument holding a string resource ID for the text to be displayed
-     * on the selection button that closes this chooser dialog.
+     * The name of the fragment argument holding a string resource ID for the
+     * text to be displayed on the selection button that closes this chooser
+     * dialog.
      */
     private static final String ARG_BUTTON_TEXT_RES_ID = "buttonTextResourceID";
 
     /**
-     * The name of the fragment argument holding the fragment tag of the fragment that instantiated
-     * this puzzle chooser.
+     * The name of the fragment argument holding the fragment tag of the
+     * fragment that instantiated this puzzle chooser.
      */
     private static final String ARG_CONSUMER_TAG = "consumerTag";
 
@@ -93,12 +100,14 @@ public class PuzzleChooserDialog extends DialogFragment {
      * Creates a new instance of this fragment.
      *
      * @param buttonTextResID
-     *     The string resource ID of the string to be displayed on the select button that closes
-     *     this fragment and reports the selection. If zero, the default "OK" will be shown.
+     *     The string resource ID of the string to be displayed on the select
+     *     button that closes this fragment and reports the selection. If zero,
+     *     the default "OK" will be shown.
      * @param consumerTag
-     *     The fragment tag that identifies the fragment that instantiated this puzzle chooser.
-     *     This "consumer" fragment will be informed, via the parent activity, of the selected
-     *     puzzle type and category before this chooser is dismissed.
+     *     The fragment tag that identifies the fragment that instantiated this
+     *     puzzle chooser. This "consumer" fragment will be informed, via the
+     *     parent activity, of the selected puzzle type and category before
+     *     this chooser is dismissed.
      *
      * @return
      *     The new instance of this puzzle chooser.
@@ -117,12 +126,14 @@ public class PuzzleChooserDialog extends DialogFragment {
 
     @Override
     public View onCreateView(
-            LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        final View dialogView = inflater.inflate(R.layout.dialog_puzzle_chooser_dialog, container);
+            LayoutInflater inflater, ViewGroup container,
+            Bundle savedInstanceState) {
+        final View dialogView = inflater.inflate(
+            R.layout.dialog_puzzle_chooser_dialog, container);
         mUnbinder = ButterKnife.bind(this, dialogView);
 
-        final @StringRes int buttonTextResID
-                = getArguments() != null ? getArguments().getInt(ARG_BUTTON_TEXT_RES_ID, 0) : 0;
+        final @StringRes int buttonTextResID = getArguments() != null
+            ? getArguments().getInt(ARG_BUTTON_TEXT_RES_ID, 0) : 0;
 
         if (buttonTextResID != 0) {
             // Override the default text.
@@ -130,13 +141,17 @@ public class PuzzleChooserDialog extends DialogFragment {
         }
 
         // TODO: Default the initial value to whatever is in the "main state".
-        puzzleSpinner.setAdapter(PuzzleTypeSpinnerAdapter.createForChooser(getContext()));
+        puzzleSpinner.setAdapter(
+            PuzzleTypeSpinnerAdapter.createForChooser(getContext()));
         mSelectedPuzzleType = (PuzzleType) puzzleSpinner.getSelectedItem();
-        puzzleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        puzzleSpinner.setOnItemSelectedListener(
+            new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+            public void onItemSelected(AdapterView<?> parent, View view,
+                                       int position, long id) {
                 mSelectedPuzzleType = PuzzleType.forOrdinal(position);
-                categorySpinner.setAdapter(getCategoryAdapterForType(mSelectedPuzzleType));
+                categorySpinner.setAdapter(
+                    getCategoryAdapterForType(mSelectedPuzzleType));
             }
 
             @Override
@@ -145,12 +160,16 @@ public class PuzzleChooserDialog extends DialogFragment {
         });
 
         // TODO: Default the initial value to whatever is in the "main state".
-        categorySpinner.setAdapter(getCategoryAdapterForType(mSelectedPuzzleType));
+        categorySpinner.setAdapter(
+            getCategoryAdapterForType(mSelectedPuzzleType));
         mSelectedSolveCategory = (String) categorySpinner.getSelectedItem();
-        categorySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        categorySpinner.setOnItemSelectedListener(
+            new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                mSelectedSolveCategory = (String) parent.getItemAtPosition(position);
+            public void onItemSelected(AdapterView<?> parent, View view,
+                                       int position, long id) {
+                mSelectedSolveCategory
+                    = (String) parent.getItemAtPosition(position);
             }
 
             @Override
@@ -161,23 +180,29 @@ public class PuzzleChooserDialog extends DialogFragment {
         selectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // Relay this information back to the fragment/activity that opened this chooser.
+                // Relay this information back to the fragment/activity that
+                // opened this chooser.
                 getRelayActivity().onPuzzleSelected(
-                        getArguments().getString(ARG_CONSUMER_TAG, "not set!"),
-                        mSelectedPuzzleType, mSelectedSolveCategory);
+                    getArguments().getString(ARG_CONSUMER_TAG, "Not set!"),
+                    mSelectedPuzzleType, mSelectedSolveCategory);
                 dismiss();
             }
         });
 
-        getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        getDialog().getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+        final Window window = getDialog().getWindow();
+
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.requestFeature(Window.FEATURE_NO_TITLE);
+        }
         return dialogView;
     }
 
-    private SpinnerAdapter getCategoryAdapterForType(@NonNull PuzzleType puzzleType) {
+    private SpinnerAdapter getCategoryAdapterForType(
+            @NonNull PuzzleType puzzleType) {
         return new ArrayAdapter<>(
-                getContext(), android.R.layout.simple_spinner_dropdown_item,
-                TwistyTimer.getDBHandler().getAllCategoriesForType(puzzleType));
+            getContext(), android.R.layout.simple_spinner_dropdown_item,
+            TwistyTimer.getDBHandler().getAllCategoriesForType(puzzleType));
     }
 
     @Override
@@ -187,10 +212,11 @@ public class PuzzleChooserDialog extends DialogFragment {
     }
 
     /**
-     * Gets the activity reference type cast to support the required interface for relaying the
-     * puzzle type/category selection to another fragment.
+     * Gets the activity reference type cast to support the required interface
+     * for relaying the puzzle type/category selection to another fragment.
      *
-     * @return The attached activity, or {@code null} if no activity is attached.
+     * @return
+     *     The attached activity, or {@code null} if no activity is attached.
      */
     private <A extends PuzzleCallback> A getRelayActivity() {
         //noinspection unchecked

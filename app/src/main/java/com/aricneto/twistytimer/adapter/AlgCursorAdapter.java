@@ -69,11 +69,6 @@ public class AlgCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHol
     }
 
     @Override
-    public void onUpdateDialog() {
-        // Do nothing.
-    }
-
-    @Override
     public void onDismissDialog() {
         setIsLocked(false);
     }
@@ -106,7 +101,6 @@ public class AlgCursorAdapter extends CursorRecyclerAdapter<RecyclerView.ViewHol
             holder.pllArrows.setImageDrawable(AlgUtils.getPllArrow(mContext, pName));
             holder.pllArrows.setVisibility(View.VISIBLE);
         }
-
     }
 
     private void colorCube(AlgHolder holder, final String state) {

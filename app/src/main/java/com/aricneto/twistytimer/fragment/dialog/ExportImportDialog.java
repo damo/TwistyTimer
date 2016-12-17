@@ -28,27 +28,32 @@ import butterknife.Unbinder;
 
 /**
  * <p>
- * A dialog fragment that initiates the import and export of solve times. This dialog presents the
- * user with options to export solve times or to import solve times, and for each of those options
- * to use the simple text ("external") format or the back-up format. If the user chooses to import
- * times, a file must be chosen. When exporting, the file name and location is chosen automatically
- * by the application. If the user chooses to use the "external" format, this dialog hands over to
- * {@link PuzzleChooserDialog} to allow the user to select the puzzle type and category. Both
- * the file chooser and the puzzle chooser fragments report their choices back to this fragment via
- * the common parent activity. Once this dialog has assembled all of the necessary details for the
- * operation, it calls back to the activity to initiate the import or export operation.
+ * A dialog fragment that initiates the import and export of solve times.
+ * This dialog presents the user with options to export solve times or to
+ * import solve times, and for each of those options to use the simple text
+ * ("external") format or the back-up format. If the user chooses to import
+ * times, a file must be chosen. When exporting, the file name and location
+ * is chosen automatically by the application. If the user chooses to use the
+ * "external" format, this dialog hands over to {@link PuzzleChooserDialog}
+ * to allow the user to select the puzzle type and category. Both the file
+ * chooser and the puzzle chooser fragments report their choices back to this
+ * fragment via the common parent activity. Once this dialog has assembled
+ * all of the necessary details for the operation, it calls back to the
+ * activity to initiate the import or export operation.
  * </p>
  * <p>
- * <i>This dialog fragment <b>must</b> be used in the context of an activity that implements the
- * {@link ExportImportCallbacks} and {@code FileChooserDialog.FileCallback} interfaces and extends
- * the {@code AppCompatActivity} class, or exceptions will occur.</i>
+ * <i>This dialog fragment <b>must</b> be used in the context of an
+ * activity that implements the {@link ExportImportCallbacks} and
+ * {@code FileChooserDialog.FileCallback} interfaces and extends the
+ * {@code AppCompatActivity} class, or exceptions will occur.</i>
  * </p>
  */
 public class ExportImportDialog extends DialogFragment
-        implements FileChooserDialog.FileCallback, PuzzleChooserDialog.PuzzleCallback {
+        implements FileChooserDialog.FileCallback,
+                   PuzzleChooserDialog.PuzzleCallback {
     /**
-     * A call-back interface for the main activity, allowing this fragment to instruct the activity
-     * to carry out the import or export operation.
+     * A call-back interface for the main activity, allowing this fragment to
+     * instruct the activity to carry out the import or export operation.
      */
     public interface ExportImportCallbacks {
         /**
@@ -59,34 +64,40 @@ public class ExportImportDialog extends DialogFragment
          * @param fileFormat
          *     The solve file format.
          * @param puzzleType
-         *     The type of the puzzle whose times will be imported. This is required if the
-         *     {@code fileFormat} is {@code EXTERNAL}; it may be {@code null} if the format is
-         *     {@code BACKUP}, as it will not be used.
+         *     The type of the puzzle whose times will be imported. This is
+         *     required if the {@code fileFormat} is {@code EXTERNAL}; it may
+         *     be {@code null} if the format is {@code BACKUP}, as it will
+         *     not be used.
          * @param solveCategory
-         *     The solve category for the solve times to be imported. This is required if the
-         *     {@code fileFormat} is {@code EXTERNAL}; it may be {@code null} if the format is
-         *     {@code BACKUP}, as it will not be used.
+         *     The solve category for the solve times to be imported. This is
+         *     required if the {@code fileFormat} is {@code EXTERNAL}; it may
+         *     be {@code null} if the format is {@code BACKUP}, as it will
+         *     not be used.
          */
-        void onImportSolveTimes(@NonNull File file, @NonNull FileFormat fileFormat,
-                                PuzzleType puzzleType, String solveCategory);
+        void onImportSolveTimes(
+            @NonNull File file, @NonNull FileFormat fileFormat,
+            PuzzleType puzzleType, String solveCategory);
 
         /**
-         * Instructs the listener to begin exporting solve times to a file. The export file name and
-         * directory will be chosen automatically.
+         * Instructs the listener to begin exporting solve times to a file. The
+         * export file name and directory will be chosen automatically.
          *
          * @param fileFormat
          *     The solve file format.
          * @param puzzleType
-         *     The type of the puzzle whose times will be exported. This is required if the
-         *     {@code fileFormat} is {@code EXTERNAL}; it may be {@code null} if the format is
-         *     {@code BACKUP}, as it will not be used.
+         *     The type of the puzzle whose times will be exported. This is
+         *     required if the {@code fileFormat} is {@code EXTERNAL}; it may
+         *     be {@code null} if the format is {@code BACKUP}, as it will
+         *     not be used.
          * @param solveCategory
-         *     The solve category for the solve times to be exported. This is required if the
-         *     {@code fileFormat} is {@code EXTERNAL}; it may be {@code null} if the format is
-         *     {@code BACKUP}, as it will not be used.
+         *     The solve category for the solve times to be exported. This is
+         *     required if the {@code fileFormat} is {@code EXTERNAL}; it may
+         *     be {@code null} if the format is {@code BACKUP}, as it will
+         *     not be used.
          */
-        void onExportSolveTimes(@NonNull FileFormat fileFormat,
-                                PuzzleType puzzleType, String solveCategory);
+        void onExportSolveTimes(
+            @NonNull FileFormat fileFormat,
+            PuzzleType puzzleType, String solveCategory);
     }
 
     private Unbinder mUnbinder;
@@ -120,74 +131,81 @@ public class ExportImportDialog extends DialogFragment
     private View.OnClickListener clickListener = new View.OnClickListener() {
         @Override
         public void onClick(View view) {
-            // NOTE: The call-backs from the "FileChooserDialog" and "PuzzleChooserDialog"
-            //
             switch (view.getId()) {
                 case R.id.export_backup:
-                    // All puzzle types and categories are exported to a single back-up file.
-                    // There is no need to identify the export file or the puzzle type/category.
-                    // Just invoke the activity and dismiss this dialog.
-                    getExImActivity().onExportSolveTimes(FileFormat.BACKUP, null, null);
+                    // All puzzle types and categories are exported to a single
+                    // back-up file. There is no need to identify the export
+                    // file or the puzzle type/category. Just invoke the
+                    // activity and dismiss this dialog.
+                    getExImActivity().onExportSolveTimes(
+                        FileFormat.BACKUP, null, null);
                     dismiss();
                     break;
 
                 case R.id.export_external:
                     mFileFormat = FileFormat.EXTERNAL;
-                    // Select the single puzzle type and category that will be exported. When the
-                    // call-back from this puzzle chooser is received ("onPuzzleTypeSelected"),
-                    // this dialog will exit and hand control back to the activity to perform the
-                    // export. The call-back uses "getTag()" to tell the chooser to tell the
-                    // activity that the chosen puzzle type/category should be relayed back to this
-                    // dialog fragment.
+                    // Select the single puzzle type and category that will be
+                    // exported. When the call-back from this puzzle chooser is
+                    // received ("onPuzzleTypeSelected"), this dialog will exit
+                    // and hand control back to the activity to perform the
+                    // export. The call-back uses "getTag()" to tell the chooser
+                    // to tell the activity that the chosen puzzle type/category
+                    // should be relayed back to this dialog.
                     PuzzleChooserDialog.newInstance(
-                            R.string.action_export, ExportImportDialog.this.getTag())
-                            .show(getActivity().getSupportFragmentManager(), null);
+                            R.string.action_export,
+                            ExportImportDialog.this.getTag())
+                       .show(getActivity().getSupportFragmentManager(), null);
                     break;
 
                 case R.id.import_backup:
                     mFileFormat = FileFormat.BACKUP;
-                    // Select the file to import. When the call-back from this file chooser is
-                    // received ("onFileSelection"), this dialog will exit and hand control back
-                    // to the activity to perform the export. The call-back uses "getTag()" to tell
-                    // the chooser to tell the activity that the chosen puzzle type/category should
-                    // be relayed back to this dialog fragment.
+                    // Select the file to import. When the call-back from this
+                    // file chooser is received ("onFileSelection"), this dialog
+                    // will exit and hand control back to the activity to
+                    // perform the export. The call-back uses "getTag()" to tell
+                    // the chooser to tell the activity that the chosen puzzle
+                    // type/category should be relayed back to this dialog.
                     new FileChooserDialog.Builder(getExImActivity())
-                            .chooseButton(R.string.action_choose)
-                            .tag(ExportImportDialog.this.getTag())
-                            .show();
+                        .chooseButton(R.string.action_choose)
+                        .tag(ExportImportDialog.this.getTag())
+                        .show();
                     break;
 
                 case R.id.import_external:
-                    // Show a dialog that explains the required text format, then, when that is
-                    // closed, select the file to import. When the call-back from this file chooser
-                    // is received ("onFileSelection"), this dialog will check that the file name
-                    // is valid. If valid, the puzzle chooser will be shown.  When the call-back
-                    // from that puzzle chooser is received ("onPuzzleTypeSelected"), this dialog
-                    // will exit and hand control back to the activity to perform the import.
+                    // Show a dialog that explains the required text format,
+                    // then, when that is closed, select the file to import.
+                    // When the call-back from this file chooser is received
+                    // ("onFileSelection"), this dialog will check that the
+                    // file name is valid. If valid, the puzzle chooser will be
+                    // shown.  When the call-back from that puzzle chooser is
+                    // received ("onPuzzleTypeSelected"), this dialog will exit
+                    // and hand control to the activity to perform the import.
                     mFileFormat = FileFormat.EXTERNAL;
                     new MaterialDialog.Builder(getContext())
-                            .title(R.string.import_external_title)
-                            .content(R.string.import_external_content_first)
-                            .positiveText(R.string.action_ok)
-                            .onPositive(new MaterialDialog.SingleButtonCallback() {
-                                @Override
-                                public void onClick(@NonNull MaterialDialog dialog,
-                                                    @NonNull DialogAction which) {
-                                    new FileChooserDialog.Builder(getExImActivity())
-                                            .chooseButton(R.string.action_choose)
-                                            .tag(ExportImportDialog.this.getTag())
-                                            .show();
-                                }
-                            })
-                            .show();
+                        .title(R.string.import_external_title)
+                        .content(R.string.import_external_content_first)
+                        .positiveText(R.string.action_ok)
+                        .onPositive(new MaterialDialog.SingleButtonCallback() {
+                            @Override
+                            public void onClick(@NonNull MaterialDialog dialog,
+                                                @NonNull DialogAction which) {
+                                new FileChooserDialog.Builder(getExImActivity())
+                                    .chooseButton(R.string.action_choose)
+                                    .tag(ExportImportDialog.this.getTag())
+                                    .show();
+                            }
+                        })
+                        .show();
                     break;
 
                 case R.id.export_button:
-                    AnimUtils.toggleContentVisibility(exportBackup, exportExternal);
+                    AnimUtils.toggleContentVisibility(
+                        exportBackup, exportExternal);
                     break;
 
                 case R.id.import_button:
-                    AnimUtils.toggleContentVisibility(importBackup, importExternal);
+                    AnimUtils.toggleContentVisibility(
+                        importBackup, importExternal);
                     break;
 
                 //case R.id.help_button:
@@ -198,8 +216,10 @@ public class ExportImportDialog extends DialogFragment
 
     @Override
     public View onCreateView(
-            LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        View dialogView = inflater.inflate(R.layout.dialog_export_import, container);
+            LayoutInflater inflater, ViewGroup container,
+            Bundle savedInstanceState) {
+        View dialogView = inflater.inflate(
+            R.layout.dialog_export_import, container);
         mUnbinder = ButterKnife.bind(this, dialogView);
 
         exportBackup.setOnClickListener(clickListener);
@@ -210,8 +230,12 @@ public class ExportImportDialog extends DialogFragment
         importButton.setOnClickListener(clickListener);
         exportButton.setOnClickListener(clickListener);
 
-        getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        getDialog().getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+        final Window window = getDialog().getWindow();
+
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.requestFeature(Window.FEATURE_NO_TITLE);
+        }
         return dialogView;
     }
 
@@ -222,12 +246,15 @@ public class ExportImportDialog extends DialogFragment
     }
 
     /**
-     * Gets the activity reference type cast to support the required interfaces and base classes
-     * for export/import operations.
+     * Gets the activity reference type cast to support the required interfaces
+     * and base classes for export/import operations.
      *
-     * @return The attached activity, or {@code null} if no activity is attached.
+     * @return
+     *     The attached activity, or {@code null} if no activity is attached.
      */
-    private <A extends AppCompatActivity & FileChooserDialog.FileCallback & ExportImportCallbacks>
+    private <A extends AppCompatActivity
+                       & FileChooserDialog.FileCallback
+                       & ExportImportCallbacks>
     A getExImActivity() {
         //noinspection unchecked
         return (A) getActivity();
@@ -235,43 +262,51 @@ public class ExportImportDialog extends DialogFragment
 
     @Override
     public void onPuzzleSelected(
-            @NonNull String tag, @NonNull PuzzleType puzzleType, @NonNull String solveCategory) {
-        // Importing or exporting to an "external" format file. The file will already have been
-        // chosen if this is an import operation. Now that the puzzle type and category are known,
-        // hand control back to the activity.
+            @NonNull String tag, @NonNull PuzzleType puzzleType,
+            @NonNull String solveCategory) {
+        // Importing or exporting to an "external" format file. The file will
+        // already have been chosen if this is an import operation. Now that
+        // the puzzle type and category are known, hand control to the activity.
         if (mImportFile == null) {
-            getExImActivity().onExportSolveTimes(mFileFormat, puzzleType, solveCategory);
+            getExImActivity().onExportSolveTimes(
+                mFileFormat, puzzleType, solveCategory);
         } else {
             getExImActivity().onImportSolveTimes(
-                    mImportFile, mFileFormat, puzzleType, solveCategory);
+                mImportFile, mFileFormat, puzzleType, solveCategory);
         }
         dismiss();
     }
 
     /**
-     * Handles the selection of a file when solve times are being imported. If the "external" file
-     * format is chosen, the user must be further prompted to select the puzzle type and category
-     * to assign to the imported solve times. If the chosen file does not end with the expected
-     * file extension
+     * Handles the selection of a file when solve times are being imported. If
+     * the "external" file format is chosen, the user must be further prompted
+     * to select the puzzle type and category to assign to the imported solve
+     * times. If the chosen file does not end with the expected file extension,
+     * an error message dialog will be presented.
      *
      * @param dialog The file chooser dialog that reported the selection.
      * @param file   The file that was chosen.
      */
     @Override
-    public void onFileSelection(@NonNull FileChooserDialog dialog, @NonNull File file) {
+    public void onFileSelection(
+            @NonNull FileChooserDialog dialog, @NonNull File file) {
+
         if (ExImUtils.isFileExtensionOK(file)) {
             mImportFile = file;
 
             if (mFileFormat == FileFormat.EXTERNAL) {
-                // Need to get the puzzle type and category before importing the data. There will
-                // be a call-back to "onPuzzleSelected" before returning to the activity.
+                // Need to get the puzzle type and category before importing the
+                // data. There will be a call-back to "onPuzzleSelected" before
+                // returning to the activity.
                 PuzzleChooserDialog.newInstance(
-                        R.string.action_import, ExportImportDialog.this.getTag())
-                        .show(getActivity().getSupportFragmentManager(), null);
+                        R.string.action_import, this.getTag())
+                    .show(getActivity().getSupportFragmentManager(), null);
             } else {
-                // Importing from a back-up file. There is no need to know the puzzle type and
-                // category, as those are in the file. Hand back to the activity to do the import.
-                getExImActivity().onImportSolveTimes(mImportFile, mFileFormat, null, null);
+                // Importing from a back-up file. There is no need to know the
+                // puzzle type and category, as those are in the file. Hand back
+                // to the activity to do the import.
+                getExImActivity().onImportSolveTimes(
+                    mImportFile, mFileFormat, null, null);
                 dismiss();
             }
         } else {

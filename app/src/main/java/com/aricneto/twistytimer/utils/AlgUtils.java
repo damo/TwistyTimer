@@ -2,26 +2,29 @@ package com.aricneto.twistytimer.utils;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.v4.content.ContextCompat;
 
 import com.aricneto.twistify.R;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import static android.support.v4.content.ContextCompat.getDrawable;
+
 /**
  * Used by the alg list
  */
 public class AlgUtils {
     /**
-     * Gets a map that maps color letters to color values. The mapping is suitable for 6-sided
-     * puzzles. Colors are defined for the letters 'Y' (yellow), 'R' (red), 'G' (green),
-     * 'B' (blue), 'O' (orange), 'W' (white), and 'N' (neutral). The neutral color can be used
-     * when the color is not important, e.g., for the non-yellow stickers on the yellow face when
-     * presenting OLL algorithms.
+     * Gets a map that maps color letters to color values. The mapping is
+     * suitable for 6-sided puzzles. Colors are defined for the letters 'Y'
+     * (yellow), 'R' (red), 'G' (green), 'B' (blue), 'O' (orange), 'W'
+     * (white), and 'N' (neutral). The neutral color can be used when the
+     * color is not important, e.g., for the non-yellow stickers on the
+     * yellow face when presenting OLL algorithms.
      *
      * @return
-     *     A map keyed by the color letter and containing each corresponding color value.
+     *     A map keyed by the color letter and containing each corresponding
+     *     color value.
      */
     public static Map<Character, Integer> getColorLetterHashMap() {
         final Map<Character, Integer> map = new HashMap<>(7);
@@ -41,47 +44,47 @@ public class AlgUtils {
     public static Drawable getPllArrow(Context context, String name) {
         switch (name) {
             case "H":
-                return ContextCompat.getDrawable(context, R.drawable.pll_h_perm);
+                return getDrawable(context, R.drawable.pll_h_perm);
             case "Ua":
-                return ContextCompat.getDrawable(context, R.drawable.pll_ua_perm);
+                return getDrawable(context, R.drawable.pll_ua_perm);
             case "Ub":
-                return ContextCompat.getDrawable(context, R.drawable.pll_ub_perm);
+                return getDrawable(context, R.drawable.pll_ub_perm);
             case "Z":
-                return ContextCompat.getDrawable(context, R.drawable.pll_z_perm);
+                return getDrawable(context, R.drawable.pll_z_perm);
             case "Aa":
-                return ContextCompat.getDrawable(context, R.drawable.pll_aa_perm);
+                return getDrawable(context, R.drawable.pll_aa_perm);
             case "Ab":
-                return ContextCompat.getDrawable(context, R.drawable.pll_ab_perm);
+                return getDrawable(context, R.drawable.pll_ab_perm);
             case "E":
-                return ContextCompat.getDrawable(context, R.drawable.pll_e_perm);
+                return getDrawable(context, R.drawable.pll_e_perm);
             case "F":
-                return ContextCompat.getDrawable(context, R.drawable.pll_f_perm);
+                return getDrawable(context, R.drawable.pll_f_perm);
             case "Ga":
-                return ContextCompat.getDrawable(context, R.drawable.pll_ga_perm);
+                return getDrawable(context, R.drawable.pll_ga_perm);
             case "Gb":
-                return ContextCompat.getDrawable(context, R.drawable.pll_gb_perm);
+                return getDrawable(context, R.drawable.pll_gb_perm);
             case "Gc":
-                return ContextCompat.getDrawable(context, R.drawable.pll_gc_perm);
+                return getDrawable(context, R.drawable.pll_gc_perm);
             case "Gd":
-                return ContextCompat.getDrawable(context, R.drawable.pll_gd_perm);
+                return getDrawable(context, R.drawable.pll_gd_perm);
             case "Ja":
-                return ContextCompat.getDrawable(context, R.drawable.pll_ja_perm);
+                return getDrawable(context, R.drawable.pll_ja_perm);
             case "Jb":
-                return ContextCompat.getDrawable(context, R.drawable.pll_jb_perm);
+                return getDrawable(context, R.drawable.pll_jb_perm);
             case "Na":
-                return ContextCompat.getDrawable(context, R.drawable.pll_na_perm);
+                return getDrawable(context, R.drawable.pll_na_perm);
             case "Nb":
-                return ContextCompat.getDrawable(context, R.drawable.pll_nb_perm);
+                return getDrawable(context, R.drawable.pll_nb_perm);
             case "Ra":
-                return ContextCompat.getDrawable(context, R.drawable.pll_ra_perm);
+                return getDrawable(context, R.drawable.pll_ra_perm);
             case "Rb":
-                return ContextCompat.getDrawable(context, R.drawable.pll_rb_perm);
+                return getDrawable(context, R.drawable.pll_rb_perm);
             case "T":
-                return ContextCompat.getDrawable(context, R.drawable.pll_t_perm);
+                return getDrawable(context, R.drawable.pll_t_perm);
             case "V":
-                return ContextCompat.getDrawable(context, R.drawable.pll_v_perm);
+                return getDrawable(context, R.drawable.pll_v_perm);
             case "Y":
-                return ContextCompat.getDrawable(context, R.drawable.pll_y_perm);
+                return getDrawable(context, R.drawable.pll_y_perm);
         }
         return null;
     }

@@ -15,7 +15,7 @@ import com.aricneto.twistytimer.items.Solve;
  * displays the time value, not to the higher-level controller component.
  * </p>
  * <p>
- * {@link #onTimerCue(TimerUICue, TimerState)} is notified when the state of
+ * {@link #onTimerCue(TimerCue, TimerState)} is notified when the state of
  * the timer changes in some way. Details of the current timer state are
  * given on each notification. The UI cues are expected to drive all of the
  * changes to the presentation of the timer, aside from the simpler task of
@@ -27,7 +27,7 @@ import com.aricneto.twistytimer.items.Solve;
  * </p>
  * <p>
  * When a timer is stopped, cancelled, or reset, one of
- * {@link #onTimerStop(TimerState)}, {@link #onTimerCancelled(TimerState)},
+ * {@link #onTimerStop(TimerState)}, {@link #onTimerSet(TimerState)},
  * or {@link #onTimerReset(TimerState)} is called. This call will be made
  * <i>after</i> the last call to {@code onTimerCue} for that solve attempt.
  * This final method call delivers the definitive timer state of the solve
@@ -37,8 +37,7 @@ import com.aricneto.twistytimer.items.Solve;
  *
  * @author damo
  */
-public interface SolveAttemptHandler {
-
+public interface SolveHandler {
     // FIXME: Perhaps this is also just "onTimerSet()", too. The goal is to
     // keep the display of the timer consistent with edits made to the Solve.
     // If the edits are made via "PuzzleTimer", then it can call "onTimerSet"
@@ -53,7 +52,14 @@ public interface SolveAttemptHandler {
 
     // Create new "Solve" recording puzzle type, category and scramble.
     @NonNull
-    Solve onSolveAttemptStart();
+    // FIXME: Document that the main reason why "PuzzleTimer" holds the "Solve"
+    // instance is that it allows values such as the puzzle type and solve
+    // category to be recorded and persisted with other instance state AND ALSO
+    // such things as the scramble sequence and any other information that is
+    // incidental to the actual timing operation. This needs to be persisted
+    // in case the instance state is saved/restored while the timer is running
+    // and before the solve is complete and can be saved to the database.
+    Solve onSolveStart();
 
     // Save new solve result. The solve will have been updated from the
     // timer's details.
@@ -61,11 +67,11 @@ public interface SolveAttemptHandler {
     /**
      * <p>
      * Notifies the listener that a new solve attempt has been completed. The
-     * {@code Solve} returned from {@link #onSolveAttemptStart()} is updated
-     * with the elapsed time of the solve and any penalties incurred before
-     * being date-stamped with the current system time and passed to this
-     * method. The listener is expected to save this new result and then await
-     * the final notification of the solve attempt, the call to
+     * {@code Solve} returned from {@link #onSolveStart()} is updated with
+     * the elapsed time of the solve and any penalties incurred before being
+     * date-stamped with the current system time and passed to this method.
+     * The listener is expected to save this new result and then await the
+     * final notification of the solve attempt, the call to
      * {@link OnTimerEventListener#onTimerSet(TimerState)}, which can be used
      * to display the result.
      * </p>
@@ -90,5 +96,12 @@ public interface SolveAttemptHandler {
      * @param solve
      *     The solve instance describing the result of the solve attempt.
      */
-    void onSolveAttemptStop(@NonNull Solve solve);
+
+    // FIXME: Document that "onSolveStop" and "onSolveChange" are never called
+    // for a solve attempt that has been cancelled.
+    void onSolveStop(@NonNull Solve solve);
+
+    // FIXME: This should probably be "pushed" to the timer, so this method can
+    // probably be dispensed with.
+//    void onSolveChanged(@NonNull Solve solve);
 }

@@ -1,5 +1,6 @@
 package com.aricneto.twistytimer;
 
+import android.annotation.SuppressLint;
 import android.app.Application;
 import android.content.Context;
 
@@ -19,6 +20,8 @@ public class TwistyTimer extends Application {
     /**
      * The cached reference to the application context.
      */
+    // The application context should not cause any leaks.
+    @SuppressLint("StaticFieldLeak")
     private static Context sAppContext;
 
     @Override
@@ -29,24 +32,28 @@ public class TwistyTimer extends Application {
 
         sAppContext = getApplicationContext();
 
-        // Create a singleton instance of the "DatabaseHandler" using the application context. This
-        // avoids memory leaks elsewhere and is more convenient. There is ABSOLUTELY NO NEED to
-        // close the database EVER. Closing it in an ad hoc fashion (as was done in fragments and
-        // activities) leads to all sorts of concurrency problems, race conditions, etc. SQLite
-        // handles all of the concurrency itself, so there is no problem there. Android/Linux will
-        // ensure that the database is closed if the application process exits.
+        // Create a singleton instance of the "DatabaseHandler" using the
+        // application context. This avoids memory leaks elsewhere and is
+        // more convenient. There is ABSOLUTELY NO NEED to close the database
+        // EVER. Closing it in an ad hoc fashion (as was done in fragments
+        // and activities) leads to all sorts of concurrency problems, race
+        // conditions, etc. SQLite handles all of the concurrency itself, so
+        // there is no problem there. Android/Linux will ensure that the
+        // database is closed if the application process exits.
         //
-        // Note that the database is not opened here; it will not be opened until the first call to
-        // "getReadableDatabase" or "getWritableDatabase" and then the open database instance will
-        // be cached (by "SQLiteOpenHelper", which is the base class of "DatabaseHandler"). Those
-        // two methods should really only be called from a background task, though, as opening the
-        // database (particularly for the first time) can take some time.
+        // Note that the database is not opened here; it will not be opened
+        // until the first call to "getReadableDatabase" or
+        // "getWritableDatabase" and then the open database instance will be
+        // cached (by "SQLiteOpenHelper", which is the base class of
+        // "DatabaseHandler"). Those two methods should really only be called
+        // from a background task, though, as opening the database
+        // (particularly for the first time) can take some time.
         sDBHandler = new DatabaseHandler();
     }
 
     /**
-     * Gets the singleton instance of the database access handler. Do not close any database after
-     * use!
+     * Gets the singleton instance of the database access handler. Do not close
+     * any database after use!
      *
      * @return The database handler.
      */
@@ -55,11 +62,13 @@ public class TwistyTimer extends Application {
     }
 
     /**
-     * Gets the application context. This is a convenience for cases where a full activity context
-     * is not required. A full activity context is required to access theme attributes or inflate
-     * layouts, but for other uses, such as accessing string resources, databases, broadcast
-     * receivers, the application context is sufficient. Using the application context also avoid
-     * memory leaks that can occur if an activity context is used inappropriately.
+     * Gets the application context. This is a convenience for cases where a
+     * full activity context is not required. A full activity context is needed
+     * to access theme attributes or inflate layouts, but for other uses, such
+     * as accessing string resources, databases, broadcast receivers, the
+     * application context is sufficient. Using the application context also
+     * avoid memory leaks that can occur if an activity context is used
+     * inappropriately.
      *
      * @return The application context.
      */

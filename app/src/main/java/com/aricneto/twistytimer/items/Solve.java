@@ -5,47 +5,126 @@ import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
-import com.aricneto.twistytimer.timer.TimerState;
 import com.aricneto.twistytimer.utils.WCAMath;
 
 import org.apache.commons.lang3.StringUtils;
 
 /**
- * Stores a solve. Solves can be converted to parcels, allowing their state
- * to be saved and restored in the context of managing the user-interface
- * elements.
+ * <p>
+ * The object representation of the result of a solve attempt. Solve instances
+ * can be saved to and loaded from a database using the appropriate methods of
+ * {@link com.aricneto.twistytimer.database.DatabaseHandler DatabaseHandler}.
+ * When saved, solve instances are assigned a database ID. Before being saved,
+ * the ID is set to {@link #NO_ID}.
+ * </p>
+ * <p>
+ * Solves can be created manually or by importing solve data from external
+ * files or database back-ups files. However, solves are typically created in
+ * the context of running a {@link com.aricneto.twistytimer.timer.PuzzleTimer
+ * PuzzleTimer}. On completing a solve attempt, the new solve may be saved and
+ * edited. If edited, the puzzle timer may need to be kept up-to-date with
+ * respect to any changes made to the elapsed time or penalties, so that the
+ * changes are reflected in the timer's display. See the description of that
+ * class for details on how that might be manged.
+ * <p>
+ * {@code Solve} implements the {@code android.os.Parcelable} interface,
+ * allowing the state of a solve to be saved and restored in the context of
+ * managing the state of activities and fragments. However, when a solve is
+ * created in the context of a {@code PuzzleTimer}, the instance state of the
+ * solve is included in the state of the timer, so it does not need to be
+ * managed directly before it is ready to be saved to the database.
+ * </p>
+ * <p>
+ * Instances of a {@code Solve} are immutable. The "setter" methods do not
+ * modify the instance on which they are called; they return a new instance
+ * with the property changed as directed. To avoid confusion with the normal
+ * semantics of {@code setX} methods, the naming convention used for these
+ * methods is {@code withX}, "Create a {@code Solve} <i>with</i> a new value
+ * for property X". A "Builder Pattern" API is not provided, as it is not
+ * expected that more than one property will be changed in most typical use
+ * cases.
+ * </p>
+ * <p>
+ * Immutability makes it simpler for a timer to manage a {@code Solve} instance
+ * after the timer stops. Subsequent edits to that solve result do not affect
+ * the {@code Solve} instance held by the timer, so the timer requires an
+ * explicit notification of any changes made to the corresponding solve record,
+ * thus avoiding any ambiguity. Also, when a {@code Solve} ({@code Parcelable})
+ * is passed via an intent extra, there can be no accidental expectation that
+ * a change to the original instance that was marshaled will be reflected in
+ * the new instance created when the intent extra was unmarshaled.
+ * </p>
  */
 public class Solve implements Parcelable {
-    /**
-     * The ID value that indicates no ID has been set on this solve.
-     */
+    /** The ID value that indicates no ID has been set on this solve. */
     // NOTE: AFAIK, Android's SQLite implementation will auto-increment the
     // "_id" column value when a record is inserted. The first automatic
     // value is 1, so any value less than 1 means that the ID is not set.
     public static final int NO_ID = 0;
 
-    private long       id = NO_ID;
+    /** The database ID of the saved solve. */
+    private final long id;
 
-    private long       time;
+    /**
+     * The exact elapsed time (in milliseconds) of the solve attempt
+     * <i>including</i> any time penalties. This is the value stored in the
+     * database. Rounding is applied when it is retrieved by {@link #getTime()}.
+     */
+    private final long time;
 
+    /** The type of the puzzle that was solved. */
     @NonNull
-    private PuzzleType puzzleType;
+    private final PuzzleType puzzleType;
 
+    /** The solve category for the puzzle that was solved. */
     @NonNull
-    private String     category;
+    private final String category;
 
-    private long       date;
+    /**
+     * The date-time stamp for the solve attempt. The value is in milliseconds
+     * since the Unix epoch. The result of {@code System.currentTimeMillis()}
+     * is an appropriate value.
+     */
+    private final long date;
 
+    /**
+     * The penalties incurred for the solve attempt. Any time penalties are
+     * included in the reported elapsed time value.
+     */
     @NonNull
-    private String     scramble = "";
+    private final Penalties penalties;
 
+    /**
+     * The optional scramble sequence that was applied before the solve attempt.
+     * When not set, it is represented by an empty string, as that is more
+     * convenient than a {@code null} value when integrating the value with the
+     * user-interface.
+     */
     @NonNull
-    private Penalties  penalties;
+    private final String scramble;
 
+    /**
+     * The optional comment that describes the solve attempt. When not set, it
+     * is represented by an empty string, as that is more convenient than a
+     * {@code null} value when integrating the value with the user-interface.
+     */
     @NonNull
-    private String     comment = "";
+    private final String comment;
 
-    private boolean    history;
+    /**
+     * The "history" flag. {@code true} if the solve is assigned to the current
+     * "session", or {@code false} if it is assigned to the history of past
+     * sessions.
+     */
+    private final boolean history;
+
+    /**
+     * The cached hash code for this {@code Solve} instance. This is calculated
+     * on demand, but then never changes, as solve instances are immutable. A
+     * value of zero indicates that the hash code has not been calculated yet.
+     * Zero will never be used as a valid hash code value.
+     */
+    private int mHashCode = 0;
 
     /**
      * Creates a new solve ready to record a solve attempt. The solve will
@@ -60,43 +139,47 @@ public class Solve implements Parcelable {
      * @param category
      *     The solve category for this solve attempt.
      * @param scramble
-     *     The scramble sequence applied before starting the solve. May be
-     *     {@code null} if no scramble sequence was applied.
+     *     The scramble sequence applied before starting the solve. If the
+     *     given value is {@code null}, the scramble will be stored as an empty.
+     *     If the given value is non-{@code null}, it will be trimmed of any
+     *     leading and trailing whitespace and stored as the scramble sequence
+     *     value.
      */
     public Solve(@NonNull PuzzleType puzzleType, @NonNull String category,
                  @Nullable String scramble) {
         this(NO_ID, 0L, puzzleType, category, 0L, scramble,
-            Penalties.NO_PENALTIES, null, false);
+             Penalties.NO_PENALTIES, null, false);
     }
 
     public Solve(long time, @NonNull PuzzleType puzzleType,
                  @NonNull String category, long date, @Nullable String scramble,
-                 @NonNull Penalties penalties, @Nullable String comment,
+                 @Nullable Penalties penalties, @Nullable String comment,
                  boolean history) {
         this(NO_ID, time, puzzleType, category, date, scramble, penalties,
-            comment, history);
+             comment, history);
     }
 
     public Solve(long id, long time, @NonNull PuzzleType puzzleType,
                  @NonNull String category, long date, @Nullable String scramble,
-                 @NonNull Penalties penalties, @Nullable String comment,
+                 @Nullable Penalties penalties, @Nullable String comment,
                  boolean history) {
         this.id         = id;
         this.time       = time;
         this.puzzleType = puzzleType;
         this.category   = category;
         this.date       = date;
+        this.history    = history;
+
         // It is assumed that any "+2" penalties are already included in the
         // "time" value.
-        this.penalties  = penalties;
-        this.history    = history;
+        this.penalties = penalties == null ? Penalties.NO_PENALTIES : penalties;
 
         // Allow "scramble" and "comment" to be given as null, but then store
         // an empty string. This simplifies handling in the database, the UI
         // and the "Parcelable" implementation. The setter methods will set
         // the values appropriately and "trim" any whitespace, too.
-        setScramble(scramble);
-        setComment(comment);
+        this.scramble = scramble == null ? "" : scramble.trim();
+        this.comment  = comment  == null ? "" : comment.trim();
     }
 
     /**
@@ -117,13 +200,156 @@ public class Solve implements Parcelable {
     }
 
     /**
-     * Sets the value of the database record ID that was assigned to this
-     * solve when it was inserted into the database.
+     * Creates a new {@code Solve} instance with the value of the database
+     * record ID that was assigned to the solve when it was inserted into the
+     * database. All other properties of the new instance are copied from this
+     * instance.
      *
-     * @param id The ID value to assign to this solve.
+     * @param newID
+     *     The new ID value to assign to the solve.
+     *
+     * @return
+     *     A {@code Solve} instance with the ID set to the given value. This
+     *     instance will be a newly-created instance if the ID is not already
+     *     set to the given value, or {@code this} instance if the ID is already
+     *     set to the given value.
      */
-    public void setID(long id) {
-        this.id = id;
+    public Solve withID(long newID) {
+        if (id == newID) {
+            return this;
+        }
+
+        return new Solve(
+            newID, time, puzzleType, category, date, scramble, penalties,
+            comment, history);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given time value. All other
+     * properties of the new instance are copied from this instance. The time
+     * should not be rounded; it is the value that will be stored in the
+     * database; rounding will be applied when retrieved by {@link #getTime()}.
+     *
+     * @param newTime
+     *     The new time to assign to the solve. The value is in milliseconds
+     *     and must include any applied penalties.
+     *
+     * @return
+     *     A {@code Solve} instance with the time set to the given value. If
+     *     the time is already set to the given value, {@code this} instance is
+     *     returned.
+     */
+    public Solve withTime(long newTime) {
+        if (time == newTime) {
+            return this;
+        }
+
+        return new Solve(
+            id, newTime, puzzleType, category, date, scramble, penalties,
+            comment, history);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given "history" flag value.
+     * All other properties of the new instance are copied from this instance.
+     *
+     * @param newHistory
+     *     The new value for the "history" flag. Use {@code true} if the solve
+     *     is archived to the history of past sessions; or {@code false} if the
+     *     solve is assigned to the current session.
+     *
+     * @return
+     *     A {@code Solve} instance with the "history" flag set to the given
+     *     value. If the flag is already set to the given value, {@code this}
+     *     instance is returned.
+     */
+    public Solve withHistory(boolean newHistory) {
+        if (history == newHistory) {
+            return this;
+        }
+
+        return new Solve(
+            id, time, puzzleType, category, date, scramble, penalties,
+            comment, newHistory);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given date-time stamp
+     * value. All other properties of the new instance are copied from this
+     * instance.
+     *
+     * @param newDate
+     *     The new value for the date-time stamp. The value is in milliseconds
+     *     from the Unix epoch instant (i.e., the system real time).
+     *
+     * @return
+     *     A {@code Solve} instance with the date set to the given value. If
+     *     the date is already set to the given value, {@code this} instance is
+     *     returned.
+     */
+    public Solve withDate(long newDate) {
+        if (date == newDate) {
+            return this;
+        }
+
+        return new Solve(
+            id, time, puzzleType, category, newDate, scramble, penalties,
+            comment, history);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given penalties. All other
+     * properties of the new instance are copied from this instance. No
+     * corrections will be made to the recorded solve time if time penalties
+     * change. It is the responsibility of the caller to ensure the time is
+     * updated to include any new penalties.
+     *
+     * @param newPenalties
+     *     The penalties to assign to the solve. If {@code null}, the penalties
+     *     will be set to {@link Penalties#NO_PENALTIES}.
+     *
+     * @return
+     *     A {@code Solve} instance with the penalties set to the given value.
+     *     If the penalties value is already set to the given value (assuming
+     *     {@code NO_PENALTIES} where the value is {@code null}), {@code this}
+     *     instance is returned.
+     */
+    public Solve withPenalties(@Nullable Penalties newPenalties) {
+        if (penalties.equals(newPenalties)
+            || (penalties == Penalties.NO_PENALTIES && newPenalties == null)) {
+            return this;
+        }
+
+        return new Solve(
+            id, time, puzzleType, category, date, scramble, newPenalties,
+            comment, history);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given comment. All other
+     * properties of the new instance are copied from this instance.
+     *
+     * @param newComment
+     *     The comment to assign to the solve. If {@code null}, the comment will
+     *     be stored as an empty string. If non-{@code null}, it will be trimmed
+     *     of any leading and trailing whitespace and stored as the new comment
+     *     value.
+     *
+     * @return
+     *     A {@code Solve} instance with the comment set to the given value.
+     *     If the comment value is already set to the given value (assuming
+     *     and empty string where the value is {@code null}), {@code this}
+     *     instance is returned.
+     */
+    public Solve withComment(@Nullable String newComment) {
+        if (comment.equals(newComment)
+            || (comment.equals("") && newComment == null)) {
+            return this;
+        }
+
+        return new Solve(
+            id, time, puzzleType, category, date, scramble, penalties,
+            newComment, history);
     }
 
     /**
@@ -199,25 +425,9 @@ public class Solve implements Parcelable {
         return time;
     }
 
-    /**
-     * Sets the result time for this solve including time penalties. The
-     * given time will be recorded and stored in the database.
-     *
-     * @param time
-     *     The time (in milliseconds) recorded for this solve, including any
-     *     applied penalties.
-     */
-    public void setTime(long time) {
-        this.time = time;
-    }
-
     @NonNull
     public PuzzleType getPuzzleType() {
         return puzzleType;
-    }
-
-    public void setPuzzleType(@NonNull PuzzleType puzzleType) {
-        this.puzzleType = puzzleType;
     }
 
     @NonNull
@@ -225,16 +435,8 @@ public class Solve implements Parcelable {
         return category;
     }
 
-    public void setCategory(@NonNull String category) {
-        this.category = category;
-    }
-
     public long getDate() {
         return date;
-    }
-
-    public void setDate(long date) {
-        this.date = date;
     }
 
     /**
@@ -249,18 +451,6 @@ public class Solve implements Parcelable {
     @NonNull
     public String getScramble() {
         return scramble;
-    }
-
-    /**
-     * Sets the value of the scramble sequence. If the given value is {@code
-     * null}, the scramble will be stored as an empty string. If the given
-     * value is non-{@code null}, it will be trimmed of any leading and
-     * trailing whitespace and stored as the scramble sequence value.
-     *
-     * @param scramble The scramble sequence.
-     */
-    public void setScramble(@Nullable String scramble) {
-        this.scramble = scramble == null ? "" : scramble.trim();
     }
 
     /**
@@ -288,20 +478,6 @@ public class Solve implements Parcelable {
     }
 
     /**
-     * Sets the penalties for this solve. No corrections will be made to the
-     * time if the new penalty, or the replaced penalty, is a "+2" penalty.
-     *
-     * @param penalties
-     *     The penalties to set on this solve. If {@code null}, the penalties
-     *     will be set to {@link Penalties#NO_PENALTIES}.
-     */
-    // FIXME: Not sure where this fits in any more. Is it here to support the
-    // EditSolveDialog?
-    public void setPenalties(@Nullable Penalties penalties) {
-        this.penalties = penalties == null ? Penalties.NO_PENALTIES : penalties;
-    }
-
-    /**
      * Gets the value of the comment for this solve. If no comment was set,
      * or it was explicitly set to {@code null}, the returned comment will be
      * an empty string. If testing whether or not a comment exists,
@@ -312,20 +488,6 @@ public class Solve implements Parcelable {
     @NonNull
     public String getComment() {
         return comment;
-    }
-
-    /**
-     * Sets the value of the comment. If the given value is {@code null}, the
-     * comment will be stored as an empty string. If the given value is
-     * non-{@code null}, it will be trimmed of any leading and trailing
-     * whitespace and stored as the comment value.
-     *
-     * @param comment
-     *     The comment. If {@code null}, the comment will be set to an empty
-     *     string.
-     */
-    public void setComment(@Nullable String comment) {
-        this.comment = comment == null ? "" : comment.trim();
     }
 
     /**
@@ -346,43 +508,60 @@ public class Solve implements Parcelable {
         return history;
     }
 
-    public void setHistory(boolean history) {
-        this.history = history;
+    /**
+     * Indicates if all properties of another solve are equal to the properties
+     * of this solve.
+     *
+     * @param obj
+     *     The object to be tested against this solve for equality.
+     *
+     * @return
+     *     {@code true} if the given object is a {@code Solve} with the same
+     *     values for all of its properties as this solve; or {@code false} if
+     *     the object is {@code null}, is not a {@code Solve}, or has different
+     *     values for any of its properties.
+     */
+    @Override
+    public boolean equals(Object obj) {
+        return
+            this == obj
+            || (obj instanceof Solve
+                && id == ((Solve) obj).id
+                && time == ((Solve) obj).time
+                && puzzleType == ((Solve) obj).puzzleType
+                && category.equals(((Solve) obj).category)
+                && date == ((Solve) obj).date
+                && penalties.equals(((Solve) obj).penalties)
+                && scramble.equals(((Solve) obj).scramble)
+                && comment.equals(((Solve) obj).comment)
+                && history == ((Solve) obj).history);
     }
 
     /**
-     * Completes the details of this solve from a timer state. This updates
-     * the time, date-time stamp and penalties of the solve; the other
-     * properties remain unchanged. This can be called more than once on a
-     * solve to update the affected properties. The return value can be used
-     * to determine if any changes were made that will require the solve to
-     * be re-saved.
+     * Gets the hash code for this solve. The has code is consistent with the
+     * {@link #equals(Object)} method: two {@code Solve} objects that are equal
+     * will have the same hash code.
      *
-     * @param timerState
-     *     The timer state from which to update this solve.
-     * @param newDate
-     *     The new date-time stamp to be recorded for this solve attempt.
-     *
-     * @return
-     *     {@code true} if a new value is assigned to any of the updated
-     *     properties; or {@code false} if this solve is already up-to-date
-     *     with respect to the timer state.
+     * @return The hash code for this solve instance. Never zero.
      */
-    public boolean completeFrom(@NonNull TimerState timerState, long newDate) {
-        final Penalties newPenalties = timerState.getPenalties();
-        // "getResultTime()" includes any and all "+2" penalties.
-        final long newTime = timerState.getResultTime();
+    @Override
+    public int hashCode() {
+        if (mHashCode == 0) {
+            int code = (int) id;
 
-        if (time != newTime || date != newDate
-            || !penalties.equals(newPenalties)) {
-            time = newTime;
-            date = newDate;
-            penalties = newPenalties;
+            code = 37 * code + (int) time;
+            code = 37 * code + puzzleType.ordinal();
+            code = 37 * code + category.hashCode();
+            code = 37 * code + (int) date;
+            code = 37 * code + penalties.hashCode();
+            code = 37 * code + scramble.hashCode();
+            code = 37 * code + comment.hashCode();
+            code = 37 * code + (history ? 1 : 2);
 
-            return true; // Something changed.
+            mHashCode = code != 0 ? code : 1;
         }
 
-        return false; // Nothing changed.
+        return mHashCode;
     }
 
     /**

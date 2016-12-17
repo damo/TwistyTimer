@@ -14,15 +14,17 @@ import android.util.Log;
  */
 public class OnTimerEventLogger implements OnTimerEventListener {
     @Override
-    public void onTimerCue(@NonNull TimerCue cue,
-                           @NonNull TimerState timerState) {
-        Log.d(getClass().getSimpleName(),
-            "onTimerCue(cue=" + cue + ", timerState=" + timerState + ')');
+    public void onTimerCue(@NonNull TimerCue cue) {
+        Log.d(getClass().getSimpleName(), "onTimerCue(" + cue + ')');
     }
 
     @Override
     public void onTimerSet(@NonNull TimerState timerState) {
-        Log.d(getClass().getSimpleName(),
-            "onTimerSet(timerState=" + timerState + ')');
+        Log.d(getClass().getSimpleName(), "onTimerSet(" + timerState + ')');
+    }
+
+    @Override
+    public void onTimerPenalty(@NonNull TimerState timerState) {
+        Log.d(getClass().getSimpleName(), "onTimerPenalty(" + timerState + ')');
     }
 }
