@@ -6,13 +6,11 @@ import android.animation.AnimatorSet;
 import android.animation.LayoutTransition;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
@@ -27,10 +25,8 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
-import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
@@ -49,7 +45,6 @@ import com.aricneto.twistytimer.items.PuzzleType;
 import com.aricneto.twistytimer.items.Solve;
 import com.aricneto.twistytimer.listener.OnBackPressedInFragmentListener;
 import com.aricneto.twistytimer.scramble.ScrambleData;
-import com.aricneto.twistytimer.scramble.ScrambleImageData;
 import com.aricneto.twistytimer.scramble.ScrambleImageLoader;
 import com.aricneto.twistytimer.scramble.ScrambleLoader;
 import com.aricneto.twistytimer.solver.RubiksCubeOptimalCross;
@@ -78,7 +73,8 @@ import butterknife.ButterKnife;
 import butterknife.Unbinder;
 
 import static com.aricneto.twistytimer.utils.TTIntent.*;
-import static com.aricneto.twistytimer.utils.TimeUtils.formatTimeStatistic;
+import static com.aricneto.twistytimer.utils.TimeUtils.formatAverageTime;
+import static com.aricneto.twistytimer.utils.TimeUtils.formatResultTime;
 
 public class TimerFragment extends BaseMainFragment
         implements OnBackPressedInFragmentListener,
@@ -88,6 +84,12 @@ public class TimerFragment extends BaseMainFragment
      * Flag to enable debug logging for this class.
      */
     private static final boolean DEBUG_ME = true;
+
+    /**
+     * Flag to enable detailed debug logging of touch events for the timer.
+     */
+    @SuppressWarnings("PointlessBooleanExpression")
+    private static final boolean DEBUG_TOUCHES = DEBUG_ME && false;
 
     /**
      * A "tag" to identify this class in log messages.
@@ -106,6 +108,15 @@ public class TimerFragment extends BaseMainFragment
      */
     private static final String KEY_PUZZLE_TIMER_STATE
         = KEY_PREFIX + "puzzleTimer";
+
+    /**
+     * The key used to identify the saved instance state of the unsolved
+     * scramble data, if there is one. The associated scramble image is not
+     * saved; it will be re-generated from the scramble sequence if the
+     * scramble sequence is restored from saved instance state.
+     */
+    private static final String KEY_UNSOLVED_SCRAMBLE
+        = KEY_PREFIX + "unsolvedScramble";
 
     /**
      * A view tag used on the "+/-DNF" button to indicate if a DNF should be
@@ -170,21 +181,19 @@ public class TimerFragment extends BaseMainFragment
      */
     private long mVerifiedSolveID = Solve.NO_ID;
 
-    // Locks the chronometer so it cannot start before a scramble sequence is
-    // generated (if one is being generated), or so it does not respond to
-    // touche events just after it has been stopped and the tool-bar and
-    // other views are being restored.
-    private boolean mIsGeneratingScramble = true; // Assume until confirmed.
-    private boolean mIsRestoringToolBar   = false;
+    /**
+     * Just after the timer is stopped, the tool-bar is restored into view. The
+     * restoration is animated and takes a short time. During this time, this
+     * flag should be raised to block touch events from reaching the timer and
+     * starting it again before the tool-bar is fully restored.
+     */
+    private boolean mIsRestoringToolBar = false;
 
     /**
      * The next available scramble that has been generated, but has not yet
-     * been solved. This is updated each time a new scramble is generated.
-     * When the timer starts, this is moved to the active solve instance,
-     * (allowing it to be saved when the timer stops) and generation of a new
-     * scramble begins in the background that will update this field before
-     * the next solve. The scramble data also records the puzzle type for
-     * which it was generated.
+     * been solved. This is updated each time a new scramble is generated and
+     * again when the corresponding scramble image is generated. It is reset to
+     * {@code null} if it is "consumed" at the start of a solve attempt.
      */
     private ScrambleData mUnsolvedScramble;
 
@@ -217,6 +226,8 @@ public class TimerFragment extends BaseMainFragment
             = new TTFragmentBroadcastReceiver(this, CATEGORY_UI_INTERACTIONS) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
+            if (DEBUG_ME) Log.d(TAG, "onReceiveWhileAdded(): " + intent);
+
             switch (intent.getAction()) {
                 case ACTION_TOOLBAR_RESTORED:
                     showItems();
@@ -225,9 +236,17 @@ public class TimerFragment extends BaseMainFragment
 
                 case ACTION_GENERATE_SCRAMBLE:
                     // Action here is not in the same intent category that
-                    // "ScrambleLoader" is monitoring. Relay this request
-                    // from the tool-bar button to that loader. Safe to
-                    // access state, as "isAdded()" is a given.
+                    // "ScrambleLoader" is monitoring. Relay this request from
+                    // the tool-bar button to that loader. Safe to access state,
+                    // as "isAdded()" is a given.
+                    //
+                    // This action is fired in response to the user clicking
+                    // the generate-scramble button in the tool-bar. Therefore,
+                    // first clear any current unsolved scramble, so that
+                    // "generateScramble" will not just detect that a scramble
+                    // is already available and do nothing. The user probably
+                    // wants a new scramble, not the old one.
+                    mUnsolvedScramble = null;
                     generateScramble(getMainState().getPuzzleType());
                     break;
             }
@@ -253,6 +272,8 @@ public class TimerFragment extends BaseMainFragment
         = new TTFragmentBroadcastReceiver(this, CATEGORY_SOLVE_DATA_CHANGES) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
+            if (DEBUG_ME) Log.d(TAG, "onReceiveWhileAdded(): " + intent);
+
             // Validation ensures that where an intent action expects a "Solve"
             // instance or solve ID that one will be present, or an exception
             // will be thrown. Null-checks can then be skipped in the "case"
@@ -271,17 +292,16 @@ public class TimerFragment extends BaseMainFragment
 
             // IMPORTANT: The general approach here is to check if the timer is
             // "stopped" (which does not include being "reset") and then update
-            // the timer to reflect any changes to the solve that it is
-            // managing. If the timer is reset, then it is not managing any
-            // solve, so changes to the solve data in the database cannot have
-            // any effect on the timer. If the timer is running, then the solve
-            // it is managing has yet to be saved, so changes to the solves
-            // saved in the database cannot have any effect on the timer.
+            // the timer to reflect any changes to the solve it is managing. If
+            // the timer is reset, then it is not managing any solve. If the
+            // timer is running, then the solve it is managing has yet to be
+            // saved. In either case, changes to the solves saved in the
+            // database cannot have any effect on the reset or running timer.
             //    *ALL* changes affecting the timer state or the UI state are
             // applied by calling "PuzzleTimer.onSolveChanged(Solve)" or
             // "PuzzleTimer.reset()". These will cause "onTimerSet(TimerState)"
             // to be called back on this fragment and the changes will be
-            // applied to the UI there and only there.
+            // applied to the UI by that method (and only by that method).
             //    If the timer is running, it might be cancelled and then roll
             // back to the "previous" solve result. However, until the result
             // is rolled back, no action is taken to verify if changes to the
@@ -443,6 +463,7 @@ public class TimerFragment extends BaseMainFragment
         mvDNFButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                // A view "tag" indicates the "toggle" direction for the DNF.
                 if (v.getTag() == ANNUL_DNF) {
                     annulPostStartPenalty(Penalty.DNF);
                 } else {
@@ -516,13 +537,18 @@ public class TimerFragment extends BaseMainFragment
         mvTimerTouchProxy.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View view, MotionEvent motionEvent) {
-                if (mIsGeneratingScramble || mIsRestoringToolBar) {
-                    // Not ready to start the timer, yet. May be waiting on the
+                if (DEBUG_TOUCHES) Log.d(TAG,
+                    "TimerTouchProxy: onTouch(): action="
+                    + motionEvent.getAction());
+
+                if (mIsRestoringToolBar) {
+                    // Not ready to start the timer, yet. Waiting on the
                     // animation of the restoration of the tool-bars after the
-                    // timer was stopped, or waiting on the generation of a
-                    // scramble ("mIsGeneratingScramble" flag). In these states,
-                    // the timer cannot be running or counting down, so touches
-                    // should be ignored.
+                    // timer was stopped. In this state, the timer cannot be
+                    // running or counting down, so touches should be ignored
+                    // to prevent it from starting again until the UI settles.
+                    if (DEBUG_TOUCHES) Log.d(TAG,
+                        "  Touch ignored: currently restoring tool-bar.");
                     return false;
                 }
 
@@ -531,13 +557,13 @@ public class TimerFragment extends BaseMainFragment
                 // the side drawer menu. Otherwise, pass on those touches, so
                 // there is no "dead zone" when trying to stop the timer.
                 if (motionEvent.getX() <= touchMargin && !isTimerBusy()) {
+                    if (DEBUG_TOUCHES) Log.d(TAG,
+                        "  Touch ignored: too close to screen margin.");
                     return false;
                 }
 
                 // Just need to notify the PuzzleTimer of these events and it
                 // will do the rest.
-                if (DEBUG_ME) Log.d(TAG,
-                    "MotionEvent: action=" + motionEvent.getAction());
                 switch (motionEvent.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         mTimer.onTouchDown();
@@ -561,13 +587,18 @@ public class TimerFragment extends BaseMainFragment
                         // revert whatever it did for the last "onTouchDown"
                         // if it was not followed by "onTouchUp".
                         //
-                        // IMPORTANT: "PuzzleTimer" will not revert the last
+                        // IMPORTANT: "PuzzleTimer" will not cancel the last
                         // "onTouchDown" if that touch stopped the timer. The
                         // timer will remain stopped. This ensures that even
                         // "sloppy" touches will always stop the timer
                         // immediately.
                         mTimer.onTouchCancelled();
                         return true;
+
+                    default:
+                        if (DEBUG_TOUCHES) Log.d(TAG,
+                            "  Touch ignored: unexpected motion event action.");
+                        break;
                 }
 
                 return false;
@@ -592,7 +623,8 @@ public class TimerFragment extends BaseMainFragment
                 = oldPenalties.incurPostStartPenalty(penalty);
 
             if (!newPenalties.equals(oldPenalties)) {
-                final Solve newSolve = oldSolve.withPenalties(newPenalties);
+                final Solve newSolve
+                    = oldSolve.withPenaltiesAdjustingTime(newPenalties);
 
                 // Disable the quick action buttons while the background task
                 // is running; they will still be shown (and will reflect the
@@ -613,6 +645,9 @@ public class TimerFragment extends BaseMainFragment
                 // buttons.
                 mVerifiedSolveID = Solve.NO_ID;
                 showQuickActionButtons(newSolve, false); // Show but disable.
+                // If a new penalty is incurred any "congratulations" on the
+                // solve being a new record may no longer be valid.
+                hideCongratulations();
                 TwistyTimer.getDBHandler().updateSolveAndNotifyAsync(newSolve);
             }
         }
@@ -632,10 +667,14 @@ public class TimerFragment extends BaseMainFragment
                 = oldPenalties.annulPostStartPenalty(penalty);
 
             if (!newPenalties.equals(oldPenalties)) {
-                final Solve newSolve = oldSolve.withPenalties(newPenalties);
+                final Solve newSolve
+                    = oldSolve.withPenaltiesAdjustingTime(newPenalties);
 
                 mVerifiedSolveID = Solve.NO_ID;
-                // Show but disable.
+                showQuickActionButtons(oldSolve, false);
+                // Annulling a penalty may result in a record "worst" score not
+                // being the worst any more, so hide any "congratulations" text.
+                hideCongratulations();
                 TwistyTimer.getDBHandler().updateSolveAndNotifyAsync(newSolve);
             }
         }
@@ -658,8 +697,11 @@ public class TimerFragment extends BaseMainFragment
                     @Override
                     public void onClick(@NonNull MaterialDialog dialog,
                                         @NonNull DialogAction which) {
+                        // Like "incurPostStartPenalty()", but when the delete
+                        // task is done, "ACTION_ONE_SOLVE_DELETED" is received.
                         mVerifiedSolveID = Solve.NO_ID;
                         showQuickActionButtons(oldSolve, false);
+                        hideCongratulations();
                         TwistyTimer.getDBHandler()
                                    .deleteSolveAndNotifyAsync(oldSolve);
                     }
@@ -689,6 +731,8 @@ public class TimerFragment extends BaseMainFragment
                         if (!newSolve.equals(oldSolve)) {
                             mVerifiedSolveID = Solve.NO_ID;
                             showQuickActionButtons(newSolve, false);
+                            // Changing the comment does not affect the validity
+                            // of any "congratulations" text.
                             TwistyTimer.getDBHandler()
                                        .updateSolveAndNotifyAsync(newSolve);
 
@@ -730,9 +774,9 @@ public class TimerFragment extends BaseMainFragment
 
         if (DEBUG_ME) Log.d(TAG,
             "  onActivityCreated -> initLoader: SCRAMBLE LOADER");
-        getLoaderManager().initLoader(MainActivity.SCRAMBLE_LOADER_ID, null,
-            new LoggingLoaderCallbacks<ScrambleData>(
-                    TAG, "SCRAMBLE LOADER") {
+        getLoaderManager().initLoader(
+            MainActivity.SCRAMBLE_LOADER_ID, null,
+            new LoggingLoaderCallbacks<ScrambleData>(TAG, "SCRAMBLE LOADER") {
                 @Override
                 public Loader<ScrambleData> onCreateLoader(
                     int id, Bundle args) {
@@ -755,25 +799,26 @@ public class TimerFragment extends BaseMainFragment
 
         if (DEBUG_ME) Log.d(TAG,
             "  onActivityCreated -> initLoader: SCRAMBLE IMAGE LOADER");
-        getLoaderManager().initLoader(MainActivity.SCRAMBLE_IMAGE_LOADER_ID,
-            null, new LoggingLoaderCallbacks<ScrambleImageData>(
+        getLoaderManager().initLoader(
+            MainActivity.SCRAMBLE_IMAGE_LOADER_ID, null,
+            new LoggingLoaderCallbacks<ScrambleData>(
                     TAG, "SCRAMBLE IMAGE LOADER") {
                 @Override
-                public Loader<ScrambleImageData> onCreateLoader(
+                public Loader<ScrambleData> onCreateLoader(
                     int id, Bundle args) {
                     if (DEBUG_ME) super.onCreateLoader(id, args);
                     return new ScrambleImageLoader(getContext());
                 }
 
                 @Override
-                public void onLoadFinished(Loader<ScrambleImageData> loader,
-                                           ScrambleImageData data) {
+                public void onLoadFinished(Loader<ScrambleData> loader,
+                                           ScrambleData data) {
                     if (DEBUG_ME) super.onLoadFinished(loader, data);
                     onScrambleImageGenerated(data);
                 }
 
                 @Override
-                public void onLoaderReset(Loader<ScrambleImageData> loader) {
+                public void onLoaderReset(Loader<ScrambleData> loader) {
                     if (DEBUG_ME) super.onLoaderReset(loader);
                 }
             });
@@ -796,6 +841,12 @@ public class TimerFragment extends BaseMainFragment
             // have no effect.
             mTimer.onRestoreInstanceState(
                 savedInstanceState.getParcelable(KEY_PUZZLE_TIMER_STATE));
+
+            // The unsolved scramble may be null. If not null, it will *not*
+            // have any image, as images are not saved and restored. An image
+            // will be generated later in "onResume()", if needed.
+            mUnsolvedScramble
+                = savedInstanceState.getParcelable(KEY_UNSOLVED_SCRAMBLE);
         }
 
         // If the statistics are already loaded, the update notification will
@@ -804,9 +855,9 @@ public class TimerFragment extends BaseMainFragment
         // yet loaded), nothing will be displayed until this fragment, as a
         // registered observer, is notified when loading is complete.
         onStatisticsUpdated(StatisticsCache.getInstance().getStatistics());
-        StatisticsCache.getInstance().registerObserver(this); // Unregistered in "onDestroyView".
 
-        // Unregister receivers in "onDetach()".
+        // Unregister these in "onDestroyView".
+        StatisticsCache.getInstance().registerObserver(this);
         registerReceiver(mUIInteractionReceiver);
         registerReceiver(mSolveDataChangedReceiver);
 
@@ -821,39 +872,49 @@ public class TimerFragment extends BaseMainFragment
         super.onStart();
 
         // The view and all of the instance state has been restored. However,
-        // this may not be the first time that "onStart" has been called.
-        // "SettingsActivity" may have been started and changed some
-        // preferences, so this is the time to apply the latest values of the
-        // shared preferences to the views and other components.
+        // this may not be the first time that "onStart()" has been called.
+        // "SettingsActivity" may have been started and some preferences may
+        // have changed, so now is the time to apply the up-to-date values of
+        // the shared preferences to the views and other components.
 
-        // Inject the up-to-date inspection duration and hold-to-start flag.
-        // If the instance state was restored in "onActivityCreated()", the
-        // up-to-date values used for any *new* solve attempts. If the timer
-        // was running when its state was saved, the old values will be used
-        // for that solve attempt until it is stopped.
-        //
-        // If inspection is not enabled, pass zero to the timer to make it
-        // skip the inspection countdown.
-        final boolean isInspectionEnabled = Prefs.getBoolean(
-            R.string.pk_inspection_enabled, R.bool.default_inspection_enabled);
-        final long inspTimeMS = Prefs.getInspectionTime() * 1_000L; // s -> ms
-        final boolean isHoldToStart = Prefs.getBoolean(
-            R.string.pk_hold_to_start_enabled,
-            R.bool.default_hold_to_start_enabled);
+        // Inject the up-to-date inspection duration and hold-to-start flag
+        // into the puzzle timer. If the instance state was restored in
+        // "onActivityCreated()", the up-to-date values will be used for any
+        // *new* solve attempts. If the timer was running when its state was
+        // saved, the old preference values will be used until the completion
+        // of that solve attempt.
 
-        mTimer.setInspectionDuration(isInspectionEnabled ? inspTimeMS : 0);
-        mTimer.setHoldToStartEnabled(isHoldToStart);
+        mTimer.setInspectionDuration(
+            Prefs.getBoolean(R.string.pk_inspection_enabled,
+                             R.bool.default_inspection_enabled)
+                ? Prefs.getInspectionTime() * 1_000L // Convert s to ms.
+                : 0);                                // Inspection disabled.
+        mTimer.setHoldToStartEnabled(
+            Prefs.getBoolean(R.string.pk_hold_to_start_enabled,
+                             R.bool.default_hold_to_start_enabled));
+
+        // The start cue is always enabled if hold-to-start is enabled.
+        mvTimerView.setStartCueEnabled(
+            Prefs.getBoolean(R.string.pk_start_cue_enabled,
+                             R.bool.default_start_cue_enabled)
+            || Prefs.getBoolean(R.string.pk_hold_to_start_enabled,
+                                R.bool.default_hold_to_start_enabled));
+        mvTimerView.setHiResTimerEnabled(
+            Prefs.getBoolean(R.string.pk_show_hi_res_timer,
+                             R.bool.default_show_hi_res_timer));
+        mvTimerView.setHideTimeText(
+            Prefs.getBoolean(R.string.pk_hide_time_while_running,
+                             R.bool.default_hide_time_while_running)
+                ? getString(R.string.hideTimeText)
+                : null); // Solve time will not be hidden/masked.
 
         // Apply most of the "advanced timer appearance settings".
-        if (Prefs.getBoolean(
-                R.string.pk_advanced_timer_settings_enabled,
-                R.bool.default_advanced_timer_settings_enabled)) {
-
+        if (Prefs.getBoolean(R.string.pk_advanced_timer_settings_enabled,
+                             R.bool.default_advanced_timer_settings_enabled)) {
             mvTimerView.setDisplayScale(Prefs.getTimerDisplayScale());
 
-            if (Prefs.getBoolean(
-                    R.string.pk_large_quick_actions_enabled,
-                    R.bool.default_large_quick_actions_enabled)) {
+            if (Prefs.getBoolean(R.string.pk_large_quick_actions_enabled,
+                                 R.bool.default_large_quick_actions_enabled)) {
                 mvDeleteButton.setImageDrawable(ContextCompat.getDrawable(
                     getContext(), R.drawable.ic_delete_white_36dp));
                 mvCommentButton.setImageDrawable(ContextCompat.getDrawable(
@@ -867,9 +928,9 @@ public class TimerFragment extends BaseMainFragment
                 mvMinusTwoButton.setTextSize(qabTextSize);
             }
 
-            final int timerTextOffsetPx = Prefs.getInt(
-                R.string.pk_timer_text_offset_px,
-                R.integer.default_timer_text_offset_px);
+            final int timerTextOffsetPx
+                = Prefs.getInt(R.string.pk_timer_text_offset_px,
+                               R.integer.default_timer_text_offset_px);
 
             mvTimerView.setTranslationY(-timerTextOffsetPx);
             mvQuickActionPanel.setTranslationY(-timerTextOffsetPx);
@@ -887,22 +948,24 @@ public class TimerFragment extends BaseMainFragment
         setUpCrossHints(puzzleType);    // ... also sets "mShowCrossHints".
         setUpScrambleImage(puzzleType); // ... if enabled.
 
+        // NOTE: There used to be a "lock" field that prevented the timer from
+        // starting until the scramble was generated. However, this is now gone.
+        // It is left to the discretion of the user to decide to start before
+        // the solve is generated or to wait for the scramble. If the scrambles
+        // are slow to generate, the user will not be forced to wait for them.
         if (Prefs.isScrambleEnabled()) {
+            mvScrambleText.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+                mvScrambleText.getTextSize() * Prefs.getScrambleTextScale());
             if (!Prefs.showScrambleImage()) {
                 mvScrambleImg.setVisibility(View.GONE);
             }
-            // "mIsGeneratingScramble" stays raised to lock out the timer
-            // until a scramble arrives.
         } else {
             mvScrambleText.setVisibility(View.GONE);
             mvScrambleImg.setVisibility(View.GONE);
-            // No scramble will be generated automatically, so no need to
-            // lock out the timer.
-            mIsGeneratingScramble = false;
+            // If the scramble preference has just been disabled, there may be
+            // a scramble lying around since before that change, so drop it.
+            mUnsolvedScramble = null;
         }
-
-        mvScrambleText.setTextSize(TypedValue.COMPLEX_UNIT_PX,
-                mvScrambleText.getTextSize() * Prefs.getScrambleTextScale());
 
         if (!Prefs.showSessionStats()) {
             mvStatsPanel.setVisibility(View.INVISIBLE);
@@ -916,8 +979,14 @@ public class TimerFragment extends BaseMainFragment
 
         mvCrossHintsSlider.setPanelState(PanelState.HIDDEN);
 
-        // TODO: Only if "mUnsolvedScramble" is null or not?
-        generateScramble(getMainState().getPuzzleType());   // ... if enabled.
+        // Generate a scramble if scrambles are enabled and if no unsolved
+        // scramble is available already (from "mUnsolvedScramble", possibly
+        // restored from instance state). If there is an unsolved scramble, but
+        // it has no image, then only the image will be generated (if generation
+        // of images is enabled). If there is an unsolved scramble, but it has
+        // the wrong puzzle type, it will be discarded and a new scramble (and
+        // image) will be generated.
+        generateScramble(getMainState().getPuzzleType());
 
         // Wake the puzzle timer. This will cause it to start sending
         // notifications to update the display, etc. It is placed into its
@@ -934,13 +1003,8 @@ public class TimerFragment extends BaseMainFragment
 
         // Put the timer into its "sleep" state. This will cause it to cease
         // sending notifications to update the display, etc., as there is no
-        // point in updating the UI if the timer display is not (fully)
+        // point in refreshing the UI if the timer display is not (fully)
         // visible. Re-awaken it in "onResume()".
-        // FIXME: Does the call to "onTouchCancelled" belong here or in
-        // "PuzzleTimer"?
-        // FIXME: Explain why the touch needs to be cancelled (comments
-        // available elsewhere).
-        mTimer.onTouchCancelled();
         mTimer.sleep();
     }
 
@@ -969,6 +1033,12 @@ public class TimerFragment extends BaseMainFragment
             outState.putParcelable(
                 KEY_PUZZLE_TIMER_STATE, mTimer.onSaveInstanceState());
         }
+
+        if (mUnsolvedScramble != null) {
+            // NOTE: If there is a scramble image, it will not be saved.
+            // Instead, it will be re-generated when the state is restored.
+            outState.putParcelable(KEY_UNSOLVED_SCRAMBLE, mUnsolvedScramble);
+        }
     }
 
     @Override
@@ -980,20 +1050,23 @@ public class TimerFragment extends BaseMainFragment
     @Override
     public void onDestroyView() {
         if (DEBUG_ME) Log.d(TAG, "onDestroyView()");
-        super.onDestroyView();
+
+        mRecentStatistics = null;
+        mVerifiedSolveID = Solve.NO_ID;
 
         mUnbinder.unbind();
+
         StatisticsCache.getInstance().unregisterObserver(this);
-        mRecentStatistics = null;
+        unregisterReceiver(mUIInteractionReceiver);
+        unregisterReceiver(mSolveDataChangedReceiver);
+
+        super.onDestroyView();
     }
 
     @Override
     public void onDetach() {
         if (DEBUG_ME) Log.d(TAG, "onDetach()");
         super.onDetach();
-
-        unregisterReceiver(mUIInteractionReceiver);
-        unregisterReceiver(mSolveDataChangedReceiver);
     }
 
     @Override
@@ -1002,10 +1075,8 @@ public class TimerFragment extends BaseMainFragment
         super.onMainStateChanged(newMainState, oldMainState); // For logging.
 
         // If the puzzle type changes, any displayed scramble and image will
-        // become invalid.
-        if (newMainState.getPuzzleType() != oldMainState.getPuzzleType()) {
-            generateScramble(getMainState().getPuzzleType()); // ... if enabled.
-        }
+        // become invalid. "generateScramble()" will determine what to do.
+        generateScramble(getMainState().getPuzzleType()); // ... if enabled.
     }
 
     /**
@@ -1094,9 +1165,9 @@ public class TimerFragment extends BaseMainFragment
                 break;
 
             case CUE_STOPPING:
-                // "onSolveAttemptStop" (if not cancelled) and "onTimerSet"
-                // will be called after this cue is notified, so the work will
-                // happen there.
+                // "onTimerSet()" and "onSolveStop" (if not cancelled) will be
+                // called after this cue is notified, so the work will happen
+                // there.
                 break;
         }
     }
@@ -1125,7 +1196,7 @@ public class TimerFragment extends BaseMainFragment
      * solve has been saved and has an ID. When that notification is received,
      * the broadcast receiver will notify the timer that the solve has changed
      * (it now has an ID), and the timer will store the new solve reference and
-     * call back to this {@code onTimerSet} method. The
+     * call back to this {@code onTimerSet} method. The FIXME: ?????
      * </p>
      * <p>
      * At any time, the solve managed by the
@@ -1248,19 +1319,18 @@ public class TimerFragment extends BaseMainFragment
         } else if (timerState.isReset()) {
             showFullScreenTimer(false);
             hideQuickActionButtons();
+            hideCongratulations();
         } else if (timerState.isRunning()) {
             showFullScreenTimer(true);
             hideQuickActionButtons();
+            hideCongratulations();
         } else {
             // Timer is in a hold-to-start or ready-to-start state. Wait for
             // "onTimerCue()" before going full-screen.
             showFullScreenTimer(false);
             hideQuickActionButtons();
+            hideCongratulations();
         }
-
-        // FIXME: If the solve is reset (e.g., just after it has been deleted)
-        // hide "mvCongratsText", etc. Could this be built into the show/hide
-        // methods for the quick action buttons? Well, into "hide", anyway.
     }
 
     @Override
@@ -1276,19 +1346,13 @@ public class TimerFragment extends BaseMainFragment
         final MainState mainState = getMainState();
         final Solve newSolve = new Solve(
             mainState.getPuzzleType(), mainState.getSolveCategory(),
-            mUnsolvedScramble != null ? mUnsolvedScramble.scramble : null);
+            consumeScramble(mainState.getPuzzleType())); // May be null.
 
-        // Ensure that, if the timer is cancelled, the "previous" solve that is
-        // restored will be re-verified by "onTimerSet()". This ensures that
-        // any background tasks that might affect the database record for the
-        // "previous" solve will not cause any problems.
+        // Ensure that, if the timer is cancelled, the "previous" solve that may
+        // then be restored will be re-verified by "onTimerSet()". This ensures
+        // that changes made to its database record by any background tasks
+        // completed before then will be detected properly at that time.
         mVerifiedSolveID = Solve.NO_ID;
-
-        // Generate a new scramble to replace the now-consumed scramble. This
-        // does nothing if scrambles are not enabled. An early result from the
-        // generator will not be displayed until after the timer stops.
-        mUnsolvedScramble = null;
-        generateScramble(mainState.getPuzzleType());
 
         return newSolve;
     }
@@ -1297,16 +1361,25 @@ public class TimerFragment extends BaseMainFragment
     public void onSolveStop(@NonNull Solve solve) {
         if (DEBUG_ME) Log.d(TAG, "onSolveStop(" + solve + ')');
 
-        // The solve is saved asynchronously. "onTimerSet()" will be called back
-        // when this method returns, so the result can be displayed then, but
-        // wait for the broadcast of "ACTION_ONE_SOLVE_ADDED" to be received
-        // before presenting the quick-action controls. The ID will be set on
-        // the "Solve" instance passed back in that broadcast intent.
-        TwistyTimer.getDBHandler().addSolveAndNotifyAsync(solve);
-
+        // As "onSolveStop()" is called only once per solve attempt (i.e., it
+        // is not called again if the solve is restored after a configuration
+        // change, etc.), this is the place to proclaim the new solve to be a
+        // record (if appropriate). There is no need to save it first. In fact,
+        // if it were saved first and the loaded statistics were updated with
+        // this solve (in response to "ACTION_ONE_SOLVE_ADDED"), it would no
+        // longer be possible to tell if was a new best/worst record time; it
+        // must be compared to the *previous* best/worst times from the
+        // statistics *before* adding it to those statistics.
         if (!solve.getPenalties().hasDNF()) {
             proclaimRecordTimes(solve);
         }
+
+        // The solve is saved *asynchronously*. "onTimerSet()" has been called,
+        // but it did not enable the quick action buttons because the solve had
+        // no assigned ID. On receiving "ACTION_ONE_SOLVE_ADDED", the solve get
+        // its record ID, "onTimerSet()" will be called again, and it will
+        // enable the buttons.
+        TwistyTimer.getDBHandler().addSolveAndNotifyAsync(solve);
     }
 
     /**
@@ -1368,11 +1441,13 @@ public class TimerFragment extends BaseMainFragment
                 || mRecentStatistics == null
                 || mRecentStatistics.getAllTimeNumSolves()
                    - mRecentStatistics.getAllTimeNumDNFSolves() < 4) {
-            // Not a valid time, or there are no previous statistics, or not
-            // enough previous times to make reporting meaningful (or
+            // Not a valid time, or there are no previous statistics, or
+            // not enough previous times to make reporting meaningful (or
             // non-annoying), so cannot check for a new PB.
             return;
         }
+
+        boolean isBestTime = false;
 
         if (Prefs.proclaimBestTime()) {
             final long previousBestTime
@@ -1381,11 +1456,14 @@ public class TimerFragment extends BaseMainFragment
             // If "previousBestTime" is a DNF or UNKNOWN, it will be less
             // than zero, so the new solve time cannot better (i.e., lower).
             if (newTime < previousBestTime ) {
+                isBestTime = true;
                 mvCongratsRipple.startRippleAnimation();
                 mvCongratsText.setText(getString(R.string.personal_best_message,
-                    formatTimeStatistic(previousBestTime - newTime)));
+                    // Not strictly a "result" time, but use that formatter.
+                    formatResultTime(previousBestTime - newTime)));
                 mvCongratsText.setVisibility(View.VISIBLE);
 
+                // TODO: Explain why this is here. Does it not stop by itself?
                 new Handler().postDelayed(new Runnable() {
                     @Override
                     public void run() {
@@ -1397,7 +1475,7 @@ public class TimerFragment extends BaseMainFragment
             }
         }
 
-        if (Prefs.proclaimWorstTime()) {
+        if (Prefs.proclaimWorstTime() && !isBestTime) {
             final long previousWorstTime
                 = mRecentStatistics.getAllTimeWorstTime();
 
@@ -1407,7 +1485,7 @@ public class TimerFragment extends BaseMainFragment
             if (previousWorstTime > 0 && newTime > previousWorstTime) {
                 mvCongratsText.setText(
                     getString(R.string.personal_worst_message,
-                        formatTimeStatistic(newTime - previousWorstTime)));
+                        formatResultTime(newTime - previousWorstTime)));
 
                 final int bgDrawableRes
                     = Prefs.getBoolean(R.string.pk_timer_bg_enabled,
@@ -1537,20 +1615,17 @@ public class TimerFragment extends BaseMainFragment
         // from "stats" already rounded appropriately.
         String sessionCount = String.format(
             Locale.getDefault(), "%,d", stats.getSessionNumSolves());
-        String sessionMeanTime
-            = formatTimeStatistic(stats.getSessionMeanTime());
-        String sessionBestTime
-            = formatTimeStatistic(stats.getSessionBestTime());
-        String sessionWorstTime
-            = formatTimeStatistic(stats.getSessionWorstTime());
+        String sessionMeanTime = formatAverageTime(stats.getSessionMeanTime());
+        String sessionBestTime = formatResultTime(stats.getSessionBestTime());
+        String sessionWorstTime = formatResultTime(stats.getSessionWorstTime());
 
-        String sessionCurrentAvg5 = formatTimeStatistic(
+        String sessionCurrentAvg5 = formatAverageTime(
             stats.getAverageOf(5, true).getCurrentAverage());
-        String sessionCurrentAvg12 = formatTimeStatistic(
+        String sessionCurrentAvg12 = formatAverageTime(
             stats.getAverageOf(12, true).getCurrentAverage());
-        String sessionCurrentAvg50 = formatTimeStatistic(
+        String sessionCurrentAvg50 = formatAverageTime(
             stats.getAverageOf(50, true).getCurrentAverage());
-        String sessionCurrentAvg100 = formatTimeStatistic(
+        String sessionCurrentAvg100 = formatAverageTime(
             stats.getAverageOf(100, true).getCurrentAverage());
 
         mvStatsTimesAvg.setText(
@@ -1567,38 +1642,36 @@ public class TimerFragment extends BaseMainFragment
     }
 
     private void showFullScreenTimer(boolean isFullScreen) {
-        if (DEBUG_ME) Log.d(TAG, "showFullScreenTimer(" + isFullScreen + ')');
+        if (DEBUG_ME) Log.e(TAG, "showFullScreenTimer(" + isFullScreen + ')');
+
+        // FIXME: Document that hiding a hidden tool bar or showing one that is
+        // already showing will no longer cause any problems.
 
         if (isFullScreen) {
-            // Locking the orientation avoids configuration changes (fragment
-            // re-starts) while the timer is running full-screen.
-            //
-            // TODO: Review this. Previously, instance state was not saved, so
-            // configuration changed had to be avoided. However, the new state
-            // management and "PuzzleTimer" should be able to handle it. The
-            // caveat is that touch events that occur during a configuration
-            // change might be lost. Therefore, a touch intended to stop the
-            // timer could jolt the device and trigger a screen rotation. In
-            // that case, is it certain that the timer will stop and that the
-            // screen will be restored properly? Until edge cases like that are
-            // tested, it is probably best to lock the orientation.
-            lockOrientation(getActivity());
-            // FIXME: Should probably broadcast this from "onTimerCue"...
+            // If full-screen mode is turned off, the other branch of this "if"
+            // statement fires and "mIsRestoringToolBar" is set to "true".
+            // However, if before the tool-bar is fully restored it is hidden
+            // again (which often happens when "onTimerSet()" is trying to
+            // initialise the correct UI state), then "ACTION_TOOLBAR_RESTORED"
+            // will not be broadcast and "mIsRestoringToolBar" will remain set.
+            // Therefore, it is necessary to reset it here to ensure that touch
+            // events will not be ignored if the tool-bar is not fully restored.
+            mIsRestoringToolBar = false;
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_HIDE_TOOLBAR);
-
             hideItems();
         } else {
-            // "TimerMainFragment" hosts the tool-bar, so it will show it.
+            // "TimerMainFragment" hosts the tool-bar, so it will restore it.
             // However, it animates it back into view, so this fragment must do
             // nothing until it receives the "ACTION_TOOLBAR_RESTORED" intent
             // broadcast when that animation ends. While "mIsRestoringToolBar"
             // is true, touch events will not be relayed to the puzzle timer,
             // so the timer cannot be restarted, etc., until everything settles
-            // down. That flag is cleared, and the other views of this fragment
-            // are made visible, once that broadcast intent is received.
+            // down. That flag is cleared once that broadcast intent is received
+            // (or if "showFullScreenTimer(false)" is called before the tool-bar
+            // is fully restored, see above).
             mIsRestoringToolBar = true;
-            unlockOrientation(getActivity());
             broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SHOW_TOOLBAR);
+            // "showItems()" is called on receiving "ACTION_TOOLBAR_RESTORED".
         }
     }
 
@@ -1633,13 +1706,6 @@ public class TimerFragment extends BaseMainFragment
         // "INVISIBLE" maybe makes them appear for the purpose of fading them
         // out.
 
-        // FIXME: Is this right? It is not shown by "showItems", but that
-        // would be conditionally, anyway. The issue is that if a new solve
-        // is cancelled, should the old items be returned to the way there
-        // were or not?
-        mvCongratsText.setVisibility(View.INVISIBLE);
-        mvCongratsText.setCompoundDrawables(null, null, null, null);
-
         if (Prefs.isScrambleEnabled()) {
             mvScrambleText.setEnabled(false);
             mvScrambleText.setVisibility(View.INVISIBLE);
@@ -1661,6 +1727,15 @@ public class TimerFragment extends BaseMainFragment
     }
 
     /**
+     * Hides the "congratulations" text and related content that is shown when
+     * a new solve attempt beats a previous record.
+     */
+    private void hideCongratulations() {
+        mvCongratsText.setVisibility(View.INVISIBLE);
+        mvCongratsText.setCompoundDrawables(null, null, null, null);
+    }
+
+    /**
      * Hides the quick action buttons. This affects the visibility of the
      * whole panel that contains the buttons.
      */
@@ -1668,8 +1743,7 @@ public class TimerFragment extends BaseMainFragment
         if (DEBUG_ME) Log.d(TAG, "hideQuickActionButtons()");
 
         // Use "INVISIBLE", not "GONE", otherwise a layout transition from
-        // "INVISIBLE" to "GONE" might be animated visibly, which looks
-        // really bad.
+        // "INVISIBLE" to "GONE" might be animated visibly, which looks awful.
         mvQuickActionPanel.setVisibility(View.INVISIBLE);
     }
 
@@ -1706,13 +1780,19 @@ public class TimerFragment extends BaseMainFragment
 
         final Penalties p = solve.getPenalties();
 
+        // FIXME: There is a bit of an issue with the width of the "DNF" button
+        // view: as it changes from "+DNF" to "-DNF", there is a slight change
+        // to its width which makes the UI look a bit jumpy. It would probably
+        // be too cramped if separate "+DNF" and "-DNF" buttons were added. Can
+        // the width be fixed?
         if (p.canIncurPostStartPenalty(Penalty.DNF)) {
             // A post-start DNF can be incurred. Show "+DNF" and clear the tag.
             mvDNFButton.setText("+DNF");
             mvDNFButton.setEnabled(isVerified);
             mvDNFButton.setTag(null);
         } else if (p.canAnnulPostStartPenalty(Penalty.DNF)) {
-            // This DNF can be annulled. Show "-DNF" and tag as "ANNUL_DNF".
+            // This DNF can be annulled. Show "-DNF" and tag as "ANNUL_DNF", so
+            // the click handler will know which way to "toggle" the DNF.
             mvDNFButton.setText("-DNF");
             mvDNFButton.setEnabled(isVerified);
             mvDNFButton.setTag(ANNUL_DNF);
@@ -1751,128 +1831,180 @@ public class TimerFragment extends BaseMainFragment
         mvQuickActionPanel.setVisibility(View.VISIBLE);
     }
 
-    public static void lockOrientation(Activity activity) {
-        int rotation =
-            ((WindowManager) activity.getSystemService(Context.WINDOW_SERVICE))
-                .getDefaultDisplay().getRotation();
-        int tempOrientation
-            = activity.getResources().getConfiguration() .orientation;
-        int orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+    /**
+     * Consumes the unsolved scramble, if one is available, and returns its
+     * scramble sequence for use in a new solve attempt. If scramble generation
+     * is enabled, a new scramble will be generated in the background to replace
+     * the consumed scramble, or to provide a scramble if none was available.
+     * That next new scramble will become available shortly after.
+     *
+     * @param puzzleType
+     *     The puzzle type for which an unsolved scramble sequence is required.
+     *
+     * @return
+     *     An available, unsolved scramble sequence for the given puzzle type;
+     *     or {@code null} if no unsolved scramble sequence is available
+     *     immediately for that puzzle type, or if generation of scrambles is
+     *     disabled.
+     */
+    private String consumeScramble(@NonNull PuzzleType puzzleType) {
+        if (Prefs.isScrambleEnabled()) {
+            final ScrambleData unsolvedScramble = mUnsolvedScramble;
 
-        switch (tempOrientation) {
-            case Configuration.ORIENTATION_LANDSCAPE:
-                if (rotation == Surface.ROTATION_0
-                    || rotation == Surface.ROTATION_90)
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
-                else
-                    orientation
-                        = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
-                break;
-            case Configuration.ORIENTATION_PORTRAIT:
-                if (rotation == Surface.ROTATION_0
-                    || rotation == Surface.ROTATION_270)
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-                else
-                    orientation
-                        = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
+            // "Consume" the unsolved scramble for the current solve attempt
+            // and generate a new one that will be available for use by a later
+            // attempt. Assume that the puzzle type for the later attempt will
+            // be the same, as it *probably* will be.
+            mUnsolvedScramble = null;
+            generateScramble(puzzleType);
+
+            if (unsolvedScramble != null
+                    && unsolvedScramble.puzzleType == puzzleType) {
+                return unsolvedScramble.scramble;
+            }
         }
-        activity.setRequestedOrientation(orientation);
-    }
 
-    private static void unlockOrientation(Activity activity) {
-        activity.setRequestedOrientation(
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        return null;
     }
 
     /**
-     * Generates a new scramble <i>if scrambles are enabled</i>. The caller
-     * does not need to check if scramble images are enabled before calling
-     * this method. The scramble will be generated on a background thread by
+     * <p>
+     * Generates a new scramble <i>if scrambles are enabled</i> and if there is
+     * no suitable unused scramble already generated. If scrambles are not
+     * enabled, no action will be taken.
+     * </p>
+     * <p>
+     * If needed, a new scramble will be generated on a background thread by
      * the {@code ScrambleLoader}. {@link #onScrambleGenerated(ScrambleData)}
      * will be called when that generation task is complete. A scramble image
      * can be generated at that time, if required.
+     * </p>
+     * <p>
+     * If an unsolved scramble sequence is already available for the given
+     * puzzle type, it will not be necessary to generate a new sequence. If the
+     * unsolved scramble does not match the required puzzle type, it will be
+     * cleared and a new scramble will be generated. If the unsolved scramble
+     * is available and is suitable, but it does not have any corresponding
+     * scramble image, an image will be generated for it. In the latter case,
+     * see {@link #generateScrambleImage(ScrambleData)} for details.
+     * </p>
      *
      * @param puzzleType
      *     The puzzle type for which a new scramble is required.
      *
      * @return
      *     {@code true} if a new scramble will be generated; or {@code false}
-     *     if scrambles are not enabled, so no scramble will be generated.
+     *     if scrambles are not enabled, or if an unsolved scramble is available
+     *     for the puzzle type, so no scramble will be generated. If a scramble
+     *     image needs to be generated, it will not affect this returned value.
      */
-    public boolean generateScramble(@NonNull PuzzleType puzzleType) {
+    boolean generateScramble(@NonNull PuzzleType puzzleType) {
         if (DEBUG_ME) Log.d(TAG, "generateScramble(puzzleType="
                                  + puzzleType.typeName() + ')');
 
         // NOTE: This is the same behaviour as before: scrambles are either
         // enabled and generated automatically when required, or they are
-        // disabled and never generated...even if the scramble button on the
-        // tool-bar is pressed. That probably needs to change.
+        // disabled and never generated---even if the *visible* scramble button
+        // on the tool-bar is pressed! TODO: That probably needs to change.
         if (Prefs.isScrambleEnabled()) {
-            TTIntent.broadcastNewScrambleRequest(puzzleType);
+            if (mUnsolvedScramble == null
+                    || mUnsolvedScramble.puzzleType != puzzleType) {
+                // In case puzzle type is wrong. This prevents any new solve
+                // from using an old unused scramble for the wrong puzzle type
+                // and also allows "onScrambleGenerated()" to test if another
+                // scramble has been generated and delivered while the task was
+                // running in the background, as it will no longer be null.
+                mUnsolvedScramble = null;
 
-            if (mShowCrossHints) {
-                mvCrossHintsSlider.setPanelState(PanelState.HIDDEN);
+                TTIntent.broadcastNewScrambleRequest(puzzleType);
+
+                if (mShowCrossHints) {
+                    mvCrossHintsSlider.setPanelState(PanelState.HIDDEN);
+                }
+
+                mvScrambleText.setText(R.string.generating_scramble);
+                mvScrambleText.setCompoundDrawablesWithIntrinsicBounds(
+                    0, 0, 0, 0);
+                mvScrambleText.setClickable(false);
+                mvScrambleImg.setVisibility(View.INVISIBLE);
+
+                if (!isTimerBusy()) {
+                    // Scrambles and images can be generated in the background
+                    // while the timer is "busy". In that case, the progress
+                    // spinner should not be displayed, as it would intrude on
+                    // the display of the timer.
+                    mvScrambleProgress.setVisibility(View.VISIBLE);
+                }
+
+                return true;
+
+            } else {
+                // A suitable scramble sequence is already available. Make sure
+                // it is visible. It may not be visible if it is being restored
+                // from instance state after a configuration change that has
+                // reset the views to their default state.
+                showScrambleSequence(mUnsolvedScramble.scramble);
+                generateScrambleImage(mUnsolvedScramble); // If not available.
             }
-
-            mvScrambleText.setText(R.string.generating_scramble);
-            mvScrambleText.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
-            mvScrambleText.setClickable(false);
-            mvScrambleImg.setVisibility(View.INVISIBLE);
-
-            if (!isTimerBusy()) {
-                // Scrambles and images can be generated in the background while
-                // the timer is busy. In that case, the progress spinner should
-                // not be displayed, as it would intrude on the timer.
-                mvScrambleProgress.setVisibility(View.VISIBLE);
-            }
-
-            mIsGeneratingScramble = true;
-            return true;
         }
+
         return false;
     }
 
     /**
-     * Generates a new scramble image <i>if scramble images are enabled</i>.
-     * The caller does not need to check if scramble images are enabled
-     * before calling this method. The scramble image will be generated on a
-     * background thread by the {@code ScrambleImageLoader}.
-     * {@link #onScrambleImageGenerated(ScrambleImageData)} will be called
-     * when that generation task is complete.
+     * Generates a new scramble image <i>if scramble images are enabled</i> and
+     * if the scramble data does not already hold an image for its scramble
+     * sequence. The caller does not need to check if scramble images are
+     * enabled before calling this method. The scramble image will be generated
+     * on a background thread by the {@link ScrambleImageLoader}.
+     * {@link #onScrambleImageGenerated(ScrambleData)} will be called when that
+     * generation task is complete.
      *
      * @param scrambleData
      *     The scramble sequence and puzzle type for which a new scramble
      *     image is required.
      *
      * @return
-     *     {@code true} if a new scramble image will be generated; or {@code
-     *     false} if scramble images are not enabled, so no scramble image
-     *     will be generated.
+     *     {@code true} if a new scramble image will be generated; or
+     *     {@code false} if scramble images are not enabled, or if the scramble
+     *     data already includes an image, so no image will be generated.
      */
     public boolean generateScrambleImage(@NonNull ScrambleData scrambleData) {
         if (DEBUG_ME) Log.d(TAG, "generateScrambleImage(" + scrambleData + ')');
 
-        if (Prefs.showScrambleImage()) { // => scramble generation is enabled.
-            TTIntent.broadcastNewScrambleImageRequest(
-                    scrambleData.puzzleType, scrambleData.scramble);
+        if (Prefs.showScrambleImage()) {
+            if (scrambleData.image == null) {
+                TTIntent.broadcastNewScrambleImageRequest(scrambleData);
 
-            // "hideScrambleImage()" is called from "generateScramble". It
-            // still remains hidden.
-            if (!isTimerBusy()) {
-                // Scrambles and images can be generated in the background
-                // while the timer is running. In that case, the progress
-                // spinner should not be displayed.
-                mvScrambleProgress.setVisibility(View.VISIBLE);
+                // The scramble image view is hidden by "generateScramble()"
+                // and it will remain hidden until the image is generated.
+                if (!isTimerBusy()) {
+                    // Scrambles and images can be generated in the background
+                    // while the timer is running. In that case, the progress
+                    // spinner should not be displayed.
+                    mvScrambleProgress.setVisibility(View.VISIBLE);
+                }
+                return true;
+            } else {
+                // A suitable scramble image is already available. Make sure
+                // it is visible. It may not be visible if it is being restored
+                // from instance state after a configuration change that has
+                // reset the views to their default state.
+                showScrambleImage(scrambleData.image);
             }
-            return true;
         }
+
+        // Not enabled or already generated.
         return false;
     }
 
     /**
      * Notifies this fragment that the {@link ScrambleLoader} has completed
      * the generation of a new scramble sequence. The sequence may now be
-     * displayed and, if required, a corresponding image can be generated.
+     * displayed and, if required, a corresponding image can be generated. If
+     * an unsolved scramble sequence is already available for the current puzzle
+     * type, or if this new scramble no loner matches the current puzzle type,
+     * this new scramble will be discarded.
      *
      * @param scrambleData
      *     The scramble data describing the generated scramble sequence and
@@ -1889,16 +2021,91 @@ public class TimerFragment extends BaseMainFragment
             return;
         }
 
+        final MainState mainState = getMainState();
+
+        if (scrambleData.puzzleType != mainState.getPuzzleType()) {
+            if (DEBUG_ME) Log.d(TAG,
+                "  New scramble is out-of-date: puzzle type has changed.");
+            return;
+        }
+
+        // "mUnsolvedScramble" is set to null before a scramble is generated.
+        // If it is not still null, investigate....
+        if (mUnsolvedScramble != null
+                && mUnsolvedScramble.puzzleType == mainState.getPuzzleType()) {
+            // The new scramble is superfluous. Perhaps two or more scrambles
+            // were generated at about the same time and another finished first.
+            // Keep that other one, as there may already be a task running to
+            // generate its corresponding image.
+            if (DEBUG_ME) Log.d(TAG,
+                "  New scramble is redundant: another is available.");
+            return;
+        }
+
         mUnsolvedScramble = scrambleData;
 
         if (!generateScrambleImage(scrambleData)) {
             // No need to keep showing the progress spinner, as no image will
-            // be generated.
+            // be generated (or one is already generated).
             mvScrambleProgress.setVisibility(View.GONE);
         }
 
+        showScrambleSequence(scrambleData.scramble);
+    }
+
+    /**
+     * Notifies this fragment that the {@link ScrambleImageLoader} has completed
+     * the generation of a new scramble image for a scramble sequence. The image
+     * may now be displayed. If the scramble sequence identified for the image
+     * does not match the currently unsolved scramble sequence, the image will
+     * be discarded. This may occur if the scramble sequence is consumed for use
+     * in a new solve attempt before the image generation task for that scramble
+     * sequence has finished.
+     *
+     * @param scrambleDataWithImage
+     *     The scramble data including the newly-generated scramble image and
+     *     the scramble sequence and the puzzle type for which it was generated.
+     */
+    private void onScrambleImageGenerated(ScrambleData scrambleDataWithImage) {
+        if (DEBUG_ME) Log.d(TAG,
+            "onScrambleImageGenerated(" + scrambleDataWithImage + ')');
+
+        if (!isAdded() || getView() == null) {
+            if (DEBUG_ME) Log.d(TAG,
+                "  Cannot display scramble image! Not attached or no view.");
+            // May have received the data too late for it to be displayed (or
+            // too early).
+            return;
+        }
+
+        if (mUnsolvedScramble != null
+                && mUnsolvedScramble.scramble.equals(
+                        scrambleDataWithImage.scramble)
+                && mUnsolvedScramble.puzzleType
+                        == scrambleDataWithImage.puzzleType) {
+            // Replace the unsolved scramble instance with this new instance
+            // that contains the image. The existence of the image needs to be
+            // known for proper management of this fragment's instance state.
+            mUnsolvedScramble = scrambleDataWithImage;
+
+            showScrambleImage(scrambleDataWithImage.image);
+        } // else this is not the image you are looking for.
+    }
+
+    /**
+     * Shows a scramble sequence. If scrambles are disabled, or if the sequence
+     * is {@code null}, nothing is changed. If the timer is currently busy, the
+     * new scramble sequence will be set, but it will not be revealed.
+     *
+     * @param scramble The scramble sequence to be displayed.
+     */
+    private void showScrambleSequence(final String scramble) {
+        if (!Prefs.isScrambleEnabled() || scramble == null) {
+            return;
+        }
+
         mvScrambleText.setVisibility(View.INVISIBLE);
-        mvScrambleText.setText(scrambleData.scramble);
+        mvScrambleText.setText(scramble);
         mvScrambleText.post(new Runnable() {
             @Override
             public void run() {
@@ -1910,35 +2117,38 @@ public class TimerFragment extends BaseMainFragment
                 Rect scrambleRect = new Rect(
                     mvScrambleText.getLeft(), mvScrambleText.getTop(),
                     mvScrambleText.getRight(), mvScrambleText.getBottom());
-                Rect chronometerRect = new Rect(
+                Rect timerRect = new Rect(
                     mvTimerView.getLeft(), mvTimerView.getTop(),
                     mvTimerView.getRight(), mvTimerView.getBottom());
                 Rect congratsRect = new Rect(
                     mvCongratsText.getLeft(), mvCongratsText.getTop(),
                     mvCongratsText.getRight(), mvCongratsText.getBottom());
 
-                if (Rect.intersects(scrambleRect, chronometerRect) ||
-                        (mvCongratsText.getVisibility() == View.VISIBLE
-                                && Rect.intersects(scrambleRect, congratsRect))) {
+                if (Rect.intersects(scrambleRect, timerRect)
+                        || (mvCongratsText.getVisibility() == View.VISIBLE
+                            && Rect.intersects(scrambleRect, congratsRect))) {
                     mvScrambleText.setClickable(true);
                     mvScrambleText.setText(R.string.scramble_text_tap_hint);
                     mvScrambleText.setCompoundDrawablesWithIntrinsicBounds(
                             R.drawable.ic_dice_white_24dp, 0, 0, 0);
-                    mvScrambleText.setOnClickListener(new View.OnClickListener() {
+                    mvScrambleText.setOnClickListener(
+                        new View.OnClickListener() {
                         @Override
                         public void onClick(View view) {
-                            mvCrossHintsText.setText(scrambleData.scramble);
+                            mvCrossHintsText.setText(scramble);
                             mvCrossHintsText.setTextSize(
                                 TypedValue.COMPLEX_UNIT_PX,
                                 mvScrambleText.getTextSize());
                             mvCrossHintsText.setGravity(Gravity.CENTER);
                             mvCrossHintsProgress.setVisibility(View.GONE);
                             mvCrossHintsProgressText.setVisibility(View.GONE);
-                            mvCrossHintsSlider.setPanelState(PanelState.EXPANDED);
+                            mvCrossHintsSlider
+                                .setPanelState(PanelState.EXPANDED);
                         }
                     });
                 } else {
-                    mvScrambleText.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+                    mvScrambleText.setCompoundDrawablesWithIntrinsicBounds(
+                        0, 0, 0, 0);
                     mvScrambleText.setClickable(false);
                 }
 
@@ -1950,42 +2160,43 @@ public class TimerFragment extends BaseMainFragment
                 }
             }
         });
-
-        // No need to lock the UI waiting for the scramble image to be
-        // generated....
-        mIsGeneratingScramble = false;
     }
 
     /**
-     * Notifies this fragment that the {@link ScrambleImageLoader} has completed
-     * the generation of a new scramble image for a scramble sequence. The image
-     * may now be displayed.
+     * Shows a scramble image. If scramble images are disabled, or if the
+     * sequence is {@code null}, nothing is changed. If the timer is currently
+     * busy, the new scramble image will be set, but it will not be revealed.
      *
-     * @param scrambleImageData
-     *     The scramble image data describing the generated scramble image,
-     *     its scramble sequence and the puzzle type for which it was generated.
+     * @param scrambleImage The scramble image to be displayed.
      */
-    private void onScrambleImageGenerated(ScrambleImageData scrambleImageData) {
-        if (DEBUG_ME) Log.d(TAG, "onScrambleImageGenerated(scrambleData="
-                + scrambleImageData + ')');
-
-        if (!isAdded() || getView() == null) {
-            if (DEBUG_ME) Log.d(TAG,
-                "  Cannot display scramble image! Not attached or no view.");
-            // May have received the data too late for it to be displayed (or
-            // too early).
+    private void showScrambleImage(final Drawable scrambleImage) {
+        if (!Prefs.showScrambleImage() || scrambleImage == null) {
             return;
         }
 
+        // Making the image invisible and then making it visible from a posted
+        // "Runnable" makes it fade in when it is ready, or when it is restored
+        // after a configuration change. The effect matches that for the
+        // scramble sequence text, so it looks better this way. The view is set
+        // "invisible" by default in the layout XML.
         mvScrambleProgress.setVisibility(View.INVISIBLE);
-        mvScrambleImg.setImageDrawable(scrambleImageData.image);
-        mvBigScrambleImg.setImageDrawable(scrambleImageData.image);
-        if (!isTimerBusy()) {
-            mvScrambleImg.setVisibility(View.VISIBLE);
-        } else {
-            if (DEBUG_ME) Log.d(TAG,
-                "  Will not display scramble image while timer is busy.");
-        }
+        mvScrambleImg.setVisibility(View.INVISIBLE);
+        mvScrambleImg.post(new Runnable() {
+            @Override
+            public void run() {
+                if (mvScrambleImg == null) {
+                    // Runnable was executed after unbinding the views, perhaps.
+                    return;
+                }
+
+                mvScrambleImg.setImageDrawable(scrambleImage);
+                mvBigScrambleImg.setImageDrawable(scrambleImage);
+
+                if (!isTimerBusy()) {
+                    mvScrambleImg.setVisibility(View.VISIBLE);
+                }
+            }
+        });
     }
 
     private class GetOptimalCross

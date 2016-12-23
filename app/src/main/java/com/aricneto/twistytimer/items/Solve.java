@@ -5,6 +5,7 @@ import android.os.Parcelable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
+import com.aricneto.twistytimer.utils.TimeUtils;
 import com.aricneto.twistytimer.utils.WCAMath;
 
 import org.apache.commons.lang3.StringUtils;
@@ -127,6 +128,19 @@ public class Solve implements Parcelable {
     private int mHashCode = 0;
 
     /**
+     * The cached string form of this solve instance. This is the form that is
+     * useful for debugging and logging. It will be defined on demand.
+     */
+    private String mAsString;
+
+    /**
+     * The cached result string form of this solve instance. This is the form
+     * that is useful when presenting the solve result to a user. It will be
+     * defined on demand.
+     */
+    private String mAsStringResult;
+
+    /**
      * Creates a new solve ready to record a solve attempt. The solve will
      * maintain information while the puzzle timer is running. The details will
      * be completed when the timer stops. This does not set any ID or elapsed
@@ -225,21 +239,23 @@ public class Solve implements Parcelable {
     }
 
     /**
-     * Creates a new {@code Solve} instance with the given time value. All other
+     * Creates a new {@code Solve} instance with the given time value that
+     * includes any time penalties already incurred on this solve. The time
+     * will be stored as-is; it will not be adjusted for penalties. All other
      * properties of the new instance are copied from this instance. The time
      * should not be rounded; it is the value that will be stored in the
      * database; rounding will be applied when retrieved by {@link #getTime()}.
      *
      * @param newTime
      *     The new time to assign to the solve. The value is in milliseconds
-     *     and must include any applied penalties.
+     *     and must <i>include</i> any incurred time penalties.
      *
      * @return
      *     A {@code Solve} instance with the time set to the given value. If
      *     the time is already set to the given value, {@code this} instance is
      *     returned.
      */
-    public Solve withTime(long newTime) {
+    public Solve withTimeIncludingPenalties(long newTime) {
         if (time == newTime) {
             return this;
         }
@@ -247,6 +263,31 @@ public class Solve implements Parcelable {
         return new Solve(
             id, newTime, puzzleType, category, date, scramble, penalties,
             comment, history);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given time value that does
+     * not include any time penalties already incurred on this solve. The new
+     * time value is adjusted automatically to include any time penalties
+     * already incurred on this {@code Solve} instance. All other properties of
+     * the new instance are copied from this instance. The time should not be
+     * rounded; it is the value that will be stored in the database <i>after
+     * any penalties are added</i>; rounding will be applied when retrieved by
+     * {@link #getTime()}.
+     *
+     * @param newTime
+     *     The new time to assign to the solve. The value is in milliseconds
+     *     and must <i>exclude</i> any incurred penalties. Time penalties will
+     *     be added automatically.
+     *
+     * @return
+     *     A {@code Solve} instance with the time set to the given value, with
+     *     appropriate adjustments for any time penalties. If the time is
+     *     already set to the given value (adjusted for penalties), {@code this}
+     *     instance is returned.
+     */
+    public Solve withTimeExcludingPenalties(long newTime) {
+        return withTimeIncludingPenalties(newTime + penalties.getTimePenalty());
     }
 
     /**
@@ -298,11 +339,11 @@ public class Solve implements Parcelable {
     }
 
     /**
-     * Creates a new {@code Solve} instance with the given penalties. All other
-     * properties of the new instance are copied from this instance. No
-     * corrections will be made to the recorded solve time if time penalties
-     * change. It is the responsibility of the caller to ensure the time is
-     * updated to include any new penalties.
+     * Creates a new {@code Solve} instance with the given penalties without
+     * adjusting the time value if there is a change to the time penalties. All
+     * other properties of the new instance are copied from this instance. Call
+     * {@link #withPenaltiesAdjustingTime(Penalties)} if automatic adjustment
+     * of the time value is required.
      *
      * @param newPenalties
      *     The penalties to assign to the solve. If {@code null}, the penalties
@@ -314,7 +355,8 @@ public class Solve implements Parcelable {
      *     {@code NO_PENALTIES} where the value is {@code null}), {@code this}
      *     instance is returned.
      */
-    public Solve withPenalties(@Nullable Penalties newPenalties) {
+    public Solve withPenaltiesNotAdjustingTime(
+            @Nullable Penalties newPenalties) {
         if (penalties.equals(newPenalties)
             || (penalties == Penalties.NO_PENALTIES && newPenalties == null)) {
             return this;
@@ -323,6 +365,49 @@ public class Solve implements Parcelable {
         return new Solve(
             id, time, puzzleType, category, date, scramble, newPenalties,
             comment, history);
+    }
+
+    /**
+     * Creates a new {@code Solve} instance with the given penalties and adjusts
+     * the time value for any <i>change</i> to the total time penalties. All
+     * other properties of the new instance are copied from this instance. Call
+     * {@link #withPenaltiesNotAdjustingTime(Penalties)} if adjustment of the
+     * time value is not required.
+     *
+     * @param newPenalties
+     *     The penalties to assign to the solve. If {@code null}, the penalties
+     *     will be set to {@link Penalties#NO_PENALTIES}.
+     *
+     * @return
+     *     A {@code Solve} instance with the penalties set to the given value
+     *     and the time adjusted to reflect the <i>difference</i> in the time
+     *     penalties before and after the change. If the penalties value is
+     *     already set to the given value (assuming {@code NO_PENALTIES} where
+     *     the value is {@code null}), {@code this} instance is returned.
+     */
+    public Solve withPenaltiesAdjustingTime(@Nullable Penalties newPenalties) {
+        // NOTE: Not the most efficient implementation, as two "Solve" objects
+        // are created if a time adjustment is made, but this is not expected
+        // to be a high-volume op, so simplicity is preferred.
+        final Solve newSolveNotAdjusted
+            = withPenaltiesNotAdjustingTime(newPenalties);
+
+        if (newSolveNotAdjusted == this) { // Penalties did not change.
+            return this;
+        }
+
+        final Penalties nonNullPenalties = newSolveNotAdjusted.getPenalties();
+        final long timeAdjustment
+            = nonNullPenalties.getTimePenalty() - penalties.getTimePenalty();
+
+        if (timeAdjustment != 0L) {
+            return new Solve(
+                id, time + timeAdjustment, puzzleType, category, date,
+                scramble, nonNullPenalties, comment, history);
+        }
+
+        // Only the DNF penalties changed, so time adjustment is not needed.
+        return newSolveNotAdjusted;
     }
 
     /**
@@ -572,25 +657,88 @@ public class Solve implements Parcelable {
      */
     @Override
     public String toString() {
-        // The code inspections suggest *not* using "StringBuilder" (as the
-        // compiler will do it, one assumes). "StringUtils.abbreviate()" will
-        // shorten strings with an ellipsis if too long and cumbersome.
-        return "Solve[id=" + getID()
-                + ", xtm=" + getExactTime()
-                + ", tm="  + getTime()
-               // Database-format puzzle type name is more useful for debugging.
-                + ", puz=" + getPuzzleType().typeName()
-                + ", cat=" + getCategory()
-                + ", dt="  + getDate() // Nothing fancy.
-                + ", pen=" + getPenalties()
-                + ", scr=" + (getScramble().length() > 15
-                        ? StringUtils.abbreviate(getScramble(), 15)
-                        : hasScramble() ? getScramble() : "<none>")
-                + ", cmt=" + (getComment().length() > 15
-                        ? StringUtils.abbreviate(getComment(), 15)
-                        : hasComment() ? getComment() : "<none>")
-                + ", hst=" + (isHistory() ? 'y' : 'n')
-                + ']';
+        if (mAsString == null) {
+            // The code inspections suggest *not* using "StringBuilder" (as the
+            // compiler will do it, one assumes). "StringUtils.abbreviate()"
+            // will shorten strings with an ellipsis if too long and cumbersome.
+            // Database-format puzzle type name is more useful for debugging.
+            mAsString
+                = "Solve[id=" + (getID() != NO_ID ? getID() : "<none>")
+                  + ", xtm=" + getExactTime()
+                  + ", tm="  + getTime()
+                  + ", puz=" + getPuzzleType().typeName()
+                  + ", cat=" + getCategory()
+                  + ", dt="  + getDate() // Nothing fancy.
+                  + ", pen=" + getPenalties()
+                  + ", scr=" + (getScramble().length() > 15
+                      ? StringUtils.abbreviate(getScramble(), 15)
+                      : hasScramble() ? getScramble() : "<none>")
+                  + ", cmt=" + (getComment().length() > 15
+                      ? StringUtils.abbreviate(getComment(), 15)
+                      : hasComment() ? getComment() : "<none>")
+                  + ", hst=" + (isHistory() ? 'y' : 'n')
+                  + ']';
+        }
+
+        return mAsString;
+    }
+
+    /**
+     * Gets a string representation of this solve in "result" form. A result
+     * shows the time penalties before starting the timer, the elapsed time and
+     * the time penalties after stopping the timer. "DNF" penalties are also
+     * indicated. For example, if the elapsed time is "24.29" seconds and there
+     * is one 2-second penalty during inspection and two 2-second penalties
+     * after stopping the timer before the user decides this is a "DNF", the
+     * result will be represented as "2s + 24.29 + 2x2s + DNF". No total is
+     * included, as that is expected to be presented separately.
+     *
+     * @return The string representation of this solve result.
+     */
+    public String toStringResult() {
+        if (mAsStringResult == null) {
+            final StringBuilder s = new StringBuilder(50);
+            final int preStartPlus2s = penalties.getPreStartPlusTwoCount();
+
+            if (preStartPlus2s > 0) {
+                if (preStartPlus2s > 1) {
+                    // "\u00d7" (multiply sign) looks nicer than "x" (letter).
+                    s.append(preStartPlus2s).append('\u00d7');
+                }
+                // FIXME? Not using "Penalty.PLUS_TWO.getDescription()" for now.
+                s.append("2s + ");
+            }
+
+            if (penalties.hasPreStartDNF()) {
+                // There will be no solve time (well, it is zero), but there may
+                // be "+2" penalties (appended above) before this "DNF".
+                s.append(Penalty.DNF.getDescription());
+                // There cannot be post-start penalties after a pre-start DNF.
+            } else {
+                // The solve time in the result string excludes time penalties.
+                s.append(TimeUtils.formatResultTime(
+                    time - penalties.getTimePenalty()));
+
+                final int postStartPlus2s
+                    = penalties.getPostStartPlusTwoCount();
+
+                if (postStartPlus2s > 0) {
+                    s.append(" + ");
+                    if (postStartPlus2s > 1) {
+                        s.append(postStartPlus2s).append('\u00d7');
+                    }
+                    s.append("2s");
+                }
+
+                if (penalties.hasPostStartDNF()) {
+                    s.append(" + ").append(Penalty.DNF.getDescription());
+                }
+            }
+
+            mAsStringResult = s.toString();
+        }
+
+        return mAsStringResult;
     }
 
     /**

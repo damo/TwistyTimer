@@ -18,63 +18,6 @@ import java.util.Map;
  */
 public final class PuzzleUtils {
     /**
-     * Formats the details of the most recent average-of-N calculation for
-     * times recorded in the current session. The string shows the average
-     * value and the list of times that contributed to the calculation of
-     * that average. If the average calculation requires the elimination of
-     * the best and worst times, these times are shown in parentheses.
-     *
-     * @param n
-     *     The value of "N" for which the "average-of-N" is required.
-     * @param stats
-     *     The statistics from which to get the details of the average
-     *     calculation.
-     *
-     * @return
-     *     The average-of-N in string format; or {@code null} if there is no
-     *     average calculated for that value of "N", or if insufficient (less
-     *     than "N") times have been recorded in the current session, of if
-     *     {@code stats} is {@code null}.
-     */
-    private static String formatAverageOfN(int n, Statistics stats) {
-        if (stats == null || stats.getAverageOf(n, true) == null) {
-            return null;
-        }
-
-        final AverageCalculator.AverageOfN aoN
-            = stats.getAverageOf(n, true).getAverageOfN();
-        final long[] times = aoN.getTimes();
-        final long average = aoN.getAverage();
-
-        if (average == Statistics.TIME_UNKNOWN || times == null) {
-            return null;
-        }
-
-        final StringBuilder s
-            = new StringBuilder(TimeUtils.formatTimeStatistic(average));
-
-        s.append(" = ");
-
-        for (int i = 0; i < n; i++) {
-            final String time = TimeUtils.formatTimeStatistic(times[i]);
-
-            // The best and worst indices may be -1, but that is OK: they just
-            // will not be marked.
-            if (i == aoN.getBestTimeIndex() || i == aoN.getWorstTimeIndex()) {
-                s.append('(').append(time).append(')');
-            } else {
-                s.append(time);
-            }
-
-            if (i < n - 1) {
-                s.append(", ");
-            }
-        }
-
-        return s.toString();
-    }
-
-    /**
      * Shares an average-of-N, formatted to a simple string.
      *
      * @param n
@@ -114,6 +57,63 @@ public final class PuzzleUtils {
     }
 
     /**
+     * Formats the details of the most recent average-of-N calculation for
+     * times recorded in the current session. The string shows the average
+     * value and the list of times that contributed to the calculation of
+     * that average. If the average calculation requires the elimination of
+     * the best and worst times, these times are shown in parentheses.
+     *
+     * @param n
+     *     The value of "N" for which the "average-of-N" is required.
+     * @param stats
+     *     The statistics from which to get the details of the average
+     *     calculation.
+     *
+     * @return
+     *     The average-of-N in string format; or {@code null} if there is no
+     *     average calculated for that value of "N", or if insufficient (less
+     *     than "N") times have been recorded in the current session, of if
+     *     {@code stats} is {@code null}.
+     */
+    private static String formatAverageOfN(int n, Statistics stats) {
+        if (stats == null || stats.getAverageOf(n, true) == null) {
+            return null;
+        }
+
+        final AverageCalculator.AverageOfN aoN
+            = stats.getAverageOf(n, true).getAverageOfN();
+        final long[] times = aoN.getTimes();
+        final long average = aoN.getAverage();
+
+        if (average == Statistics.TIME_UNKNOWN || times == null) {
+            return null;
+        }
+
+        final StringBuilder s
+            = new StringBuilder(TimeUtils.formatAverageTime(average));
+
+        s.append(" = ");
+
+        for (int i = 0; i < n; i++) {
+            final String time = TimeUtils.formatResultTime(times[i]);
+
+            // The best and worst indices may be -1, but that is OK: they just
+            // will not be marked.
+            if (i == aoN.getBestTimeIndex() || i == aoN.getWorstTimeIndex()) {
+                s.append('(').append(time).append(')');
+            } else {
+                s.append(time);
+            }
+
+            if (i < n - 1) {
+                s.append(", ");
+            }
+        }
+
+        return s.toString();
+    }
+
+    /**
      * Shares a single solve time.
      *
      * @param solve
@@ -135,7 +135,8 @@ public final class PuzzleUtils {
         shareIntent.setAction(Intent.ACTION_SEND);
         shareIntent.putExtra(Intent.EXTRA_TEXT,
             puzzleName + ": "
-            + TimeUtils.formatTimeStatistic(solve.getTime()) + "s."
+            // "formatResultTime()" will do the rounding/truncation.
+            + TimeUtils.formatResultTime(solve.getExactTime()) + "s."
             + (solve.hasComment()  ? "\n" : "")
             + solve.getComment()    // empty if not present
             + (solve.hasScramble() ? "\n" : "")
@@ -211,8 +212,8 @@ public final class PuzzleUtils {
             // "time" is already truncated to whole seconds, or is "TIME_DNF".
             histogram.append(
                 String.format("\n%7s: %s",
-                    TimeUtils.formatTimeLoRes(time), // 1 s (or DNF) bucket.
-                    convertToBar(timeFreqs.get(time)))); // "Bar" for count.
+                    TimeUtils.formatResultTimeLoRes(time), // 1s bucket interval
+                    convertToBar(timeFreqs.get(time))));   // "bar" of count
         }
 
         return histogram.toString();

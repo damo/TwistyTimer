@@ -203,7 +203,9 @@
             android:layout_alignParentLeft="true"
             android:layout_marginLeft="8dp"
             android:scaleType="fitStart"
-            tools:background="@color/red_material" />
+            android:visibility="invisible"
+            tools:background="@color/red_material"
+            tools:visibility="visible"/>
 
         <me.zhanghai.android.materialprogressbar.MaterialProgressBar
             android:id="@+id/progress_spinner"

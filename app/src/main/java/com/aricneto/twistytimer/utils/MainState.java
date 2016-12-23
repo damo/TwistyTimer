@@ -141,8 +141,7 @@ public class MainState implements Parcelable {
      */
     protected MainState(Parcel in) {
         this(PuzzleType.forTypeName(in.readString()),
-            in.readString(),
-            in.readByte() != 0);
+             in.readString(), in.readByte() != 0);
     }
 
     /**

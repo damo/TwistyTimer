@@ -14,6 +14,7 @@ import com.aricneto.twistify.BuildConfig;
 import com.aricneto.twistytimer.TwistyTimer;
 import com.aricneto.twistytimer.items.PuzzleType;
 import com.aricneto.twistytimer.items.Solve;
+import com.aricneto.twistytimer.scramble.ScrambleData;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -245,10 +246,9 @@ public final class TTIntent {
 
     /**
      * A new scramble has been generated and the image for that scramble should
-     * now be generated. Intent extras will identify the puzzle type for which
-     * to generate a scramble image and the scramble sequence to be represented.
-     * Retrieve the values of these extras with {@link #getPuzzleType(Intent)}
-     * and {@link #getScramble(Intent)}.
+     * now be generated. An intent extra will identify the puzzle type and
+     * scramble sequence to be represented by the generated image. Retrieve the
+     * scramble data with {@link #getScrambleData(Intent)}.
      */
     public static final String ACTION_GENERATE_SCRAMBLE_IMAGE
         = ACTION_PREFIX + "GENERATE_SCRAMBLE_IMAGE";
@@ -318,9 +318,12 @@ public final class TTIntent {
 
     /**
      * The name of an intent extra that can hold the last generated scramble
-     * sequence string.
+     * data including the scramble sequence and puzzle type. Note that the
+     * scramble image is not preserved if the scramble data is passed as an
+     * intent extra.
      */
-    private static final String EXTRA_SCRAMBLE = EXTRA_PREFIX + "SCRAMBLE";
+    private static final String EXTRA_SCRAMBLE_DATA
+        = EXTRA_PREFIX + "SCRAMBLE_DATA";
 
     /**
      * The name of an intent extra that can be used to record a {@link Solve}.
@@ -628,16 +631,14 @@ public final class TTIntent {
      * Broadcasts a request to generate a new scramble image from a scramble
      * sequence.
      *
-     * @param puzzleType
-     *     The type of the puzzle for which a scramble image is required.
-     * @param scramble
-     *     The scramble sequence to be represented in the image.
+     * @param scrambleData
+     *     The scramble data defining the puzzle type and scramble sequence for
+     *     which a corresponding scramble image is required.
      */
     public static void broadcastNewScrambleImageRequest(
-            @NonNull PuzzleType puzzleType, @NonNull String scramble) {
+            @NonNull ScrambleData scrambleData) {
         builder(CATEGORY_SCRAMBLE_ALERTS, ACTION_GENERATE_SCRAMBLE_IMAGE)
-            .puzzleType(puzzleType)
-            .scramble(scramble)
+            .scrambleData(scrambleData)
             .broadcast();
     }
 
@@ -721,18 +722,20 @@ public final class TTIntent {
     }
 
     /**
-     * Gets the scramble sequence from an intent extra.
+     * Gets the scramble data containing the puzzle type and scramble sequence
+     * from an intent extra. Any corresponding scramble image is not preserved
+     * when scramble data is passed in an intent extra.
      *
      * @param intent
-     *     The intent from which to get the scramble.
+     *     The intent from which to get the scramble data.
      *
      * @return
-     *     The scramble, or {@code null} if the intent does not specify any
-     *     scramble.
+     *     The scramble data (with no image), or {@code null} if the intent
+     *     does not specify any scramble data.
      */
     @Nullable
-    public static String getScramble(@NonNull Intent intent) {
-        return intent.getStringExtra(EXTRA_SCRAMBLE);
+    public static ScrambleData getScrambleData(@NonNull Intent intent) {
+        return (ScrambleData) intent.getParcelableExtra(EXTRA_SCRAMBLE_DATA);
     }
 
     /**
@@ -894,10 +897,9 @@ public final class TTIntent {
                 break;
 
             case ACTION_GENERATE_SCRAMBLE_IMAGE:
-                if (getPuzzleType(intent) == null
-                        || getScramble(intent) == null) {
+                if (getScrambleData(intent) == null) {
                     throw new IllegalArgumentException(
-                        "Missing puzzle type or scramble extras: " +  intent);
+                        "Missing scramble data extra: " +  intent);
                 }
                 break;
         }
@@ -1007,22 +1009,25 @@ public final class TTIntent {
         }
 
         /**
-         * Sets an optional extra that identifies a scramble sequence related
-         * to the action of the intent that will be broadcast. The receiver can
-         * call {@link TTIntent#getScramble(Intent)} to retrieve the scramble
-         * from the intent.
+         * Sets an optional extra that identifies a scramble data (puzzle type
+         * and scramble sequence) related to the action of the intent that will
+         * be broadcast. To retrieve the scramble data from the intent, the
+         * receiver can call {@link TTIntent#getScrambleData(Intent)}. Any
+         * scramble image on the scramble data will <i>not</i> be preserved in
+         * the intent extra.
          *
-         * @param scramble
-         *     The scramble sequence to be added to the broadcast intent. If
+         * @param scrambleData
+         *     The scramble data to be added to the broadcast intent. If
          *     {@code null}, no intent extra will be added.
          *
          * @return
          *     {@code this} broadcast builder, allowing method calls to be
          *     chained.
          */
-        public BroadcastBuilder scramble(@Nullable String scramble) {
-            if (scramble != null) {
-                mIntent.putExtra(EXTRA_SCRAMBLE, scramble);
+        public BroadcastBuilder scrambleData(
+                @Nullable ScrambleData scrambleData) {
+            if (scrambleData != null) {
+                mIntent.putExtra(EXTRA_SCRAMBLE_DATA, scrambleData);
             }
 
             return this;

@@ -174,7 +174,8 @@ public class TimeCursorAdapter
         // "time" is formatted "pretty" with smaller text for field with
         // smallest units. The time given must be already rounded (which is
         // done in "Solve.getTime()").
-        holder.timeText.setText(TimeUtils.formatResultPretty(solve.getTime()));
+        holder.timeText.setText(
+            TimeUtils.prettyFormatResultTime(solve.getTime()));
         // Clear the strike-through flags.
         holder.timeText.setPaintFlags(
             holder.timeText.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));

@@ -99,6 +99,17 @@ public interface SolveHandler {
 
     // FIXME: Document that "onSolveStop" and "onSolveChange" are never called
     // for a solve attempt that has been cancelled.
+
+    // FIXME: What was my reason for deciding that this should be called back
+    // *before* the final call to "onTimerSet()"? It had something to do with
+    // supporting synchronous *and* asynchronous implementations of a save
+    // operation. That order, somehow, was more flexible.
+
+    // FIXME: Document that this is called *after* the last call to "onTimerSet"
+    // when a solve is stopped. The handler should call "onSolveChanged" on the
+    // puzzle timer when the save is complete and an ID is assigned. That will
+    // trigger another call to "onTimerSet", which can be used to enabled edit
+    // controls, etc..
     void onSolveStop(@NonNull Solve solve);
 
     // FIXME: This should probably be "pushed" to the timer, so this method can

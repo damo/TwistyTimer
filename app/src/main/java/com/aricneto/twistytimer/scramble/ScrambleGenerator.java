@@ -173,7 +173,7 @@ public class ScrambleGenerator {
      * @param scramble The scramble string in conventional notation.
      * @return The drawable to present the scrambled image.
      */
-    public Drawable generateImageFromScramble(String scramble) {
+    public Drawable generateImage(String scramble) {
         String cubeImgSVG = null;
 
         try {

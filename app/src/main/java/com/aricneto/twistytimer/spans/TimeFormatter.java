@@ -1,7 +1,6 @@
 package com.aricneto.twistytimer.spans;
 
 import com.aricneto.twistytimer.utils.TimeUtils;
-import com.aricneto.twistytimer.utils.WCAMath;
 import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.formatter.YAxisValueFormatter;
 
@@ -15,9 +14,8 @@ public class TimeFormatter implements YAxisValueFormatter{
 
     @Override
     public String getFormattedValue(float value, YAxis yAxis) {
-        // Truncate the fractional time to whole milliseconds, then apply the
-        // WCA rounding.
-        return TimeUtils.formatTimeLoRes(
-            WCAMath.roundResult((long) (value * 1_000L)));
+        // Round the value to whole milliseconds to avoid precision errors.
+        // For example, 24.29999999 s becomes 24,300 ms.
+        return TimeUtils.formatResultTimeLoRes(Math.round(value * 1_000.0));
     }
 }

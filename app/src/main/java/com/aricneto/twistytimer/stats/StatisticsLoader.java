@@ -93,7 +93,7 @@ import static com.aricneto.twistytimer.utils.TTIntent.*;
  */
 public class StatisticsLoader extends AsyncTaskLoader<Statistics> {
     // NOTE: See the "IMPLEMENTATION NOTE" in "ScrambleLoader"; the same
-    // approach is used here.
+    // "passive" approach is used here.
 
     /**
      * Flag to enable debug logging from this class.
@@ -174,6 +174,7 @@ public class StatisticsLoader extends AsyncTaskLoader<Statistics> {
                     // same main state. Booting is handled in the same way as a
                     // change to the main state, but the boot action is targeted
                     // specifically at this type of loader.
+                    //noinspection ConstantConditions (validated above)
                     if (mLoader.resetForNewMainState(newMainState)) {
                         mLoader.onContentChanged();
                     }
@@ -458,8 +459,8 @@ public class StatisticsLoader extends AsyncTaskLoader<Statistics> {
             // This is a full, clean load, so clear out any results from the
             // previous load.
             // TODO: Add support for cancellation: add a call-back to
-            // "populateStatistics", so it can poll for cancellation while it
-            // iterates over the solves records.
+            // "populateStatistics", so it can poll for cancellation as it
+            // iterates over the solve records. Not a high priority, though.
             statsToLoad.reset();
             TwistyTimer.getDBHandler().populateStatistics(statsToLoad);
 

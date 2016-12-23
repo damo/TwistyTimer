@@ -268,6 +268,8 @@ public class Statistics {
 
         mAllTimeTimeFreqs.clear();
         mSessionTimeFreqs.clear();
+
+        mLatestSolveDate = Long.MIN_VALUE;
     }
 
     /**

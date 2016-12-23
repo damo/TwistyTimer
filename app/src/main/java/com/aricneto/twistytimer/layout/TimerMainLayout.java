@@ -151,7 +151,9 @@ public class TimerMainLayout extends LinearLayout
 
     /**
      * Starts the requested animation. If the previous animation was cancelled,
-     * this new animation will pick up from where that animation left off.
+     * this new animation will pick up from where that animation left off. In
+     * that case, any {@code runAtEnd} task for that cancelled animation will
+     * <i>not</i> be run.
      *
      * @param targetState
      *     The target state that will be active for at the end of the
@@ -160,7 +162,8 @@ public class TimerMainLayout extends LinearLayout
      *     An optional {@code Runnable} that will be run when the animation
      *     ends normally. If the animation is cancelled, this will not be run.
      */
-    private void start(@NonNull State targetState, @Nullable Runnable runAtEnd) {
+    private void start(
+            @NonNull State targetState, @Nullable Runnable runAtEnd) {
         // Check the current state (not the "targetState").
         if (mAnimator.isStarted()) {
             // Already being shown/hidden. Cancel and restart, so new "runAtEnd"

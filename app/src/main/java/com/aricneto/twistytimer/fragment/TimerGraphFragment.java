@@ -38,7 +38,8 @@ import butterknife.ButterKnife;
 import butterknife.Unbinder;
 import me.zhanghai.android.materialprogressbar.MaterialProgressBar;
 
-import static com.aricneto.twistytimer.utils.TimeUtils.formatTimeStatistic;
+import static com.aricneto.twistytimer.utils.TimeUtils.formatAverageTime;
+import static com.aricneto.twistytimer.utils.TimeUtils.formatResultTime;
 
 /**
  * A simple {@link Fragment} subclass. Use the
@@ -50,7 +51,7 @@ public class TimerGraphFragment extends BaseMainFragment
     /**
      * Flag to enable debug logging for this class.
      */
-    private static final boolean DEBUG_ME = false;
+    private static final boolean DEBUG_ME = true;
 
     /**
      * A "tag" to identify this class in log messages.
@@ -342,63 +343,57 @@ public class TimerGraphFragment extends BaseMainFragment
         // and then "formatTimeStatistic" will format the given time to the
         // correct (WCA) resolution.
 
-        String allTimeBestAvg3 = formatTimeStatistic(
+        String allTimeBestAvg3 = formatAverageTime(
             stats.getAverageOf(3, false).getBestAverage());
-        String allTimeBestAvg5 = formatTimeStatistic(
+        String allTimeBestAvg5 = formatAverageTime(
             stats.getAverageOf(5, false).getBestAverage());
-        String allTimeBestAvg12 = formatTimeStatistic(
+        String allTimeBestAvg12 = formatAverageTime(
             stats.getAverageOf(12, false).getBestAverage());
-        String allTimeBestAvg50 = formatTimeStatistic(
+        String allTimeBestAvg50 = formatAverageTime(
             stats.getAverageOf(50, false).getBestAverage());
-        String allTimeBestAvg100 = formatTimeStatistic(
+        String allTimeBestAvg100 = formatAverageTime(
             stats.getAverageOf(100, false).getBestAverage());
-        String allTimeBestAvg1000 = formatTimeStatistic(
+        String allTimeBestAvg1000 = formatAverageTime(
             stats.getAverageOf(1_000, false).getBestAverage());
 
-        String allTimeMeanTime
-            = formatTimeStatistic(stats.getAllTimeMeanTime());
-        String allTimeBestTime
-            = formatTimeStatistic(stats.getAllTimeBestTime());
-        String allTimeWorstTime
-            = formatTimeStatistic(stats.getAllTimeWorstTime());
+        String allTimeMeanTime  = formatAverageTime(stats.getAllTimeMeanTime());
+        String allTimeBestTime  = formatResultTime(stats.getAllTimeBestTime());
+        String allTimeWorstTime = formatResultTime(stats.getAllTimeWorstTime());
         // Format count using appropriate grouping separators, e.g., "1,234",
         // not "1234".
         String allTimeCount = String.format(
             Locale.getDefault(), "%,d", stats.getAllTimeNumSolves());
 
-        String sessionBestAvg3 = formatTimeStatistic(
+        String sessionBestAvg3 = formatAverageTime(
             stats.getAverageOf(3, true).getBestAverage());
-        String sessionBestAvg5 = formatTimeStatistic(
+        String sessionBestAvg5 = formatAverageTime(
             stats.getAverageOf(5, true).getBestAverage());
-        String sessionBestAvg12 = formatTimeStatistic(
+        String sessionBestAvg12 = formatAverageTime(
             stats.getAverageOf(12, true).getBestAverage());
-        String sessionBestAvg50 = formatTimeStatistic(
+        String sessionBestAvg50 = formatAverageTime(
             stats.getAverageOf(50, true).getBestAverage());
-        String sessionBestAvg100 = formatTimeStatistic(
+        String sessionBestAvg100 = formatAverageTime(
             stats.getAverageOf(100, true).getBestAverage());
-        String sessionBestAvg1000 = formatTimeStatistic(
+        String sessionBestAvg1000 = formatAverageTime(
             stats.getAverageOf(1_000, true).getBestAverage());
 
-        String sessionMeanTime
-            = formatTimeStatistic(stats.getSessionMeanTime());
-        String sessionBestTime
-            = formatTimeStatistic(stats.getSessionBestTime());
-        String sessionWorstTime
-            = formatTimeStatistic(stats.getSessionWorstTime());
+        String sessionMeanTime  = formatAverageTime(stats.getSessionMeanTime());
+        String sessionBestTime  = formatResultTime(stats.getSessionBestTime());
+        String sessionWorstTime = formatResultTime(stats.getSessionWorstTime());
         String sessionCount = String.format(
             Locale.getDefault(), "%,d", stats.getSessionNumSolves());
 
-        String sessionCurrentAvg3 = formatTimeStatistic(
+        String sessionCurrentAvg3 = formatAverageTime(
             stats.getAverageOf(3, true).getCurrentAverage());
-        String sessionCurrentAvg5 = formatTimeStatistic(
+        String sessionCurrentAvg5 = formatAverageTime(
             stats.getAverageOf(5, true).getCurrentAverage());
-        String sessionCurrentAvg12 = formatTimeStatistic(
+        String sessionCurrentAvg12 = formatAverageTime(
             stats.getAverageOf(12, true).getCurrentAverage());
-        String sessionCurrentAvg50 = formatTimeStatistic(
+        String sessionCurrentAvg50 = formatAverageTime(
             stats.getAverageOf(50, true).getCurrentAverage());
-        String sessionCurrentAvg100 = formatTimeStatistic(
+        String sessionCurrentAvg100 = formatAverageTime(
             stats.getAverageOf(100, true).getCurrentAverage());
-        String sessionCurrentAvg1000 = formatTimeStatistic(
+        String sessionCurrentAvg1000 = formatAverageTime(
             stats.getAverageOf(1_000, true).getCurrentAverage());
 
         personalBestTimes.setText(

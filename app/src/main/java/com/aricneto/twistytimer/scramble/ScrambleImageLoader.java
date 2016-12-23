@@ -7,7 +7,6 @@ import android.support.annotation.NonNull;
 import android.support.v4.content.AsyncTaskLoader;
 import android.util.Log;
 
-import com.aricneto.twistytimer.items.PuzzleType;
 import com.aricneto.twistytimer.utils.TTIntent;
 
 import static com.aricneto.twistytimer.utils.TTIntent
@@ -30,15 +29,15 @@ import static com.aricneto.twistytimer.utils.TTIntent
  * </p>
  * <p>
  * An intent with the action {@link TTIntent#ACTION_GENERATE_SCRAMBLE_IMAGE}
- * and extras that identify the puzzle type and scramble sequence will
- * trigger the generation of a new scramble. The convenience method
- * {@link TTIntent#broadcastNewScrambleImageRequest(PuzzleType, String)} can
+ * with a scramble data extra that identifies the puzzle type and scramble
+ * sequence will trigger the generation of a new scramble. The convenience
+ * method {@link TTIntent#broadcastNewScrambleImageRequest(ScrambleData)} can
  * create and broadcast that intent.
  * </p>
  *
  * @author damo
  */
-public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
+public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleData> {
     // NOTE: See the "IMPLEMENTATION NOTE" in "ScrambleLoader"; the same
     // approach is used here.
 
@@ -58,9 +57,9 @@ public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
     private ScrambleGenerator mImageGenerator;
 
     /**
-     * The scramble sequence for which the next image will be generated.
+     * The scramble data for which the next image will be generated.
      */
-    private String mNextScramble;
+    private ScrambleData mNextScramble;
 
     /**
      * The broadcast receiver that is notified when the scramble image generator
@@ -104,12 +103,11 @@ public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
                 if (DEBUG_ME) Log.d(TAG,
                     "  Requesting generation of new scramble image!");
 
-                // Perform null-checks, etc., to ensure intent is sane.
+                // Perform null-checks, etc., to ensure the extra is present.
                 TTIntent.validate(intent);
 
-                mLoader.generateScrambleImage(
-                    TTIntent.getPuzzleType(intent),
-                    TTIntent.getScramble(intent));
+                //noinspection ConstantConditions (null-checked above)
+                mLoader.generateScrambleImage(TTIntent.getScrambleData(intent));
             }
         }
     }
@@ -122,40 +120,28 @@ public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
      */
     public ScrambleImageLoader(@NonNull Context context) {
         super(context);
-        if (DEBUG_ME) Log.d(TAG, "new ScrambleImageLoader()");
     }
 
     /**
      * Starts the generation of a new scramble image from a scramble sequence.
      * If either parameter is {@code null}, no action will be taken.
      *
-     * @param newPuzzleType
-     *     The new type of the puzzle for which a scramble image is required.
-     * @param newScramble
-     *     The new scramble sequence to be represented in the image.
+     * @param scrambleData
+     *     The scramble data defining the puzzle type and scramble sequence for
+     *     which a corresponding scramble image is required.
      */
-    private void generateScrambleImage(PuzzleType newPuzzleType,
-                                       String newScramble) {
-        if (newPuzzleType != null && newScramble != null) {
-            if (mImageGenerator == null
-                || mImageGenerator.getPuzzleType() != newPuzzleType) {
+    private void generateScrambleImage(@NonNull ScrambleData scrambleData) {
+        if (mImageGenerator == null
+            || mImageGenerator.getPuzzleType() != scrambleData.puzzleType) {
 
-                mImageGenerator = new ScrambleGenerator(newPuzzleType);
-            } // else use old "mScrambleImageGenerator", as puzzle types match.
+            mImageGenerator = new ScrambleGenerator(scrambleData.puzzleType);
+        } // else use old "mScrambleImageGenerator", as puzzle types match.
 
-            if (DEBUG_ME) Log.d(TAG,
-                "Accepted scramble image generation request for: "
-                + newPuzzleType.typeName());
+        if (DEBUG_ME) Log.d(TAG,
+            "Accepted scramble image generation request for: " + scrambleData);
 
-            mNextScramble = newScramble;
-            onContentChanged();
-        } else {
-            // The broadcaster of the intent forgot to set the puzzle type
-            // and/or scramble.
-            Log.e(TAG,
-                "Request for new scramble image has no puzzle type or scramble."
-                + " Fix the bug!");
-        }
+        mNextScramble = scrambleData;
+        onContentChanged();
     }
 
     /**
@@ -195,13 +181,13 @@ public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
     /**
      * Generates a new scramble image on a background thread.
      *
-     * @return The new scramble image.
+     * @return The new scramble data including the generated image.
      */
     @Override
-    public ScrambleImageData loadInBackground() {
+    public ScrambleData loadInBackground() {
         if (DEBUG_ME) Log.d(TAG,
             "loadInBackground(): Generating new scramble image....");
-        final ScrambleImageData scrambleImageData;
+        final ScrambleData scrambleData;
 
         if (mImageGenerator != null && mNextScramble != null) {
             // Because "DEBUG_ME" is either always "true" or always "false"....
@@ -209,9 +195,8 @@ public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
             final long startTime
                 = DEBUG_ME ? SystemClock.elapsedRealtime() : 0L;
 
-            scrambleImageData = new ScrambleImageData(
-                mImageGenerator.getPuzzleType(), mNextScramble,
-                mImageGenerator.generateImageFromScramble(mNextScramble));
+            scrambleData = mNextScramble.withImage(
+                mImageGenerator.generateImage(mNextScramble.scramble));
 
             if (DEBUG_ME) Log.d(TAG,
                 String.format("  Generated scramble image in %,d ms.",
@@ -222,10 +207,10 @@ public class ScrambleImageLoader extends AsyncTaskLoader<ScrambleImageData> {
             // then be called. This is suspicious, warn about it.
             Log.w(TAG, "  Unable to generate a scramble image: "
                        + "generator or scramble are null!");
-            scrambleImageData = null;
+            scrambleData = null;
         }
 
-        return scrambleImageData;
+        return scrambleData;
     }
 
     /**

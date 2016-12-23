@@ -12,6 +12,7 @@ import android.graphics.Typeface;
 import android.support.annotation.FloatRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.annotation.VisibleForTesting;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Property;
@@ -21,23 +22,14 @@ import android.view.animation.AccelerateInterpolator;
 import com.aricneto.twistify.R;
 import com.aricneto.twistytimer.items.Penalties;
 import com.aricneto.twistytimer.items.Penalty;
-import com.aricneto.twistytimer.utils.Prefs;
+import com.aricneto.twistytimer.utils.TimeUtils;
 import com.aricneto.twistytimer.utils.WCAMath;
-
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-
-import java.util.Locale;
 
 /**
  * <p>
- * A view that displays the inspection countdown and solve timer. The
- * displayed values are managed by a {@link PuzzleTimer}. An instance of this
- * {@code TimerView} can be added as a listener for the timer's events and
- * refresh notifications.
- * </p>
- * <p>
- * This vi
+ * A view that displays the inspection countdown and solve timer. The displayed
+ * values are managed by a {@link PuzzleTimer}. An instance of this view can be
+ * added as a listener for the timer's events and refresh notifications.
  * </p>
  * <p>
  * This view does not support any padding attributes; padding is simply ignored.
@@ -45,18 +37,18 @@ import java.util.Locale;
  * <p>
  * This view does not save its instance state. It is expected that the parent
  * fragment or activity will initialise this view from a {@code PuzzleTimer}
- * whose instance state has been saved. See the description of that class for
+ * whose instance state can been saved. See the description of that class for
  * more details.
  * </p>
  *
  * @author damo
  */
 public class TimerView extends View
-       implements OnTimerEventListener, OnTimerRefreshListener {
+             implements OnTimerEventListener, OnTimerRefreshListener {
     /**
      * Flag to enable debug logging for this class.
      */
-    private static final boolean DEBUG_ME = true;
+    private static final boolean DEBUG_ME = false;
 
     /**
      * Flag to enable more debug logging for this class. When {@link #DEBUG_ME}
@@ -143,41 +135,27 @@ public class TimerView extends View
     private static final long SCALE_ANIM_DURATION = 250;
 
     /**
-     * Indicates if the time should be hidden while the solve timer is running.
-     * If enabled, the time will be replaced by the {@link #mHideTimeText}.
+     * The sample text used to show the time when in edit mode.
      */
-    private final boolean mIsHideTimeWhileRunning;
+    private static final StringBuilder SAMPLE_TIME_TEXT
+        = new StringBuilder("59:59.99");
 
     /**
-     * The text shown instead of the time if the time is hidden while running.
+     * The static text to show instead of the elapsed solve time while the timer
+     * is running. If {@code null} (the default), the solve time is shown.
      */
-    private final String mHideTimeText;
+    private String mHideTimeText;
 
     /**
-     * Indicates if the "cue start" behaviour is enabled. If enabled, the timer
-     * display will be highlighted when it is ready to start and, in that state,
-     * lifting up the touch will start the timer. If the hold-to-start behaviour
-     * is enabled, the timer display will be highlighted when the hold time has
-     * elapsed, even if this "cue start" behaviour is disabled.
+     * Indicates if the "start cue" behaviour is enabled. Enabled by default.
      */
-    private final boolean mShowStartCue;
+    private boolean mShowStartCue = true;
 
     /**
-     * Indicates if the hold-to-start behaviour is enabled. On touching down on
-     * the timer, the touch must exceed a threshold time (c. half a second)
-     * before lifting the touch will start the timer. This only applies at the
-     * start of the solve timer, not at the start of the inspection countdown.
-     * The timer display will be highlighted when the hold time has elapsed,
-     * even if this "cue start" behaviour is disabled.
+     * Indicates if the elapsed solve time will be shown to a high resolution
+     * (1/100ths of a second) while the timer is running. Enabled by default.
      */
-    private final boolean mIsHoldToStartEnabled;
-
-    /**
-     * Indicates if seconds will be shown to a high resolution while the timer
-     * is started. If enabled, fractions (hundredths) of a second will be
-     * displayed while the chronometer is running.
-     */
-    private final boolean mShowHiRes;
+    private boolean mShowHiRes = true;
 
     /**
      * The normal text color.
@@ -249,12 +227,12 @@ public class TimerView extends View
     /**
      * The text value for the currently remaining inspection time.
      */
-    private String mInspectionTimeText;
+    private StringBuilder mInspectionTimeText = new StringBuilder(20);
 
     /**
      * The text value for the currently elapsed solve time.
      */
-    private String mSolveTimeText;
+    private StringBuilder mSolveTimeText = new StringBuilder(20);
 
     /**
      * The "headline" text for the current timer state. This will show
@@ -315,34 +293,6 @@ public class TimerView extends View
         mHeadlinePaint.setAntiAlias(true);
         mHeadlinePaint.setTextAlign(Paint.Align.CENTER);
 
-        // Preferences are not available in edit mode, so just hard-code
-        // something suitable.
-        // FIXME: IMPORTANT: Decide if preferences should be accessed from
-        // here at all. This has a bit of a gamy whiff about it. In particular,
-        // why is "setDisplayScale" handled differently?
-        if (!isInEditMode()) {
-            mShowHiRes = Prefs.getBoolean(R.string.pk_show_hi_res_timer,
-                R.bool.default_show_hi_res_timer);
-
-            mShowStartCue = Prefs.getBoolean(R.string.pk_start_cue_enabled,
-                R.bool.default_start_cue_enabled);
-
-            mIsHoldToStartEnabled = Prefs.getBoolean(
-                R.string.pk_hold_to_start_enabled,
-                R.bool.default_hold_to_start_enabled);
-
-            mIsHideTimeWhileRunning = Prefs.getBoolean(
-                R.string.pk_hide_time_while_running,
-                R.bool.default_hide_time_while_running);
-            mHideTimeText = getContext().getString(R.string.hideTimeText);
-        } else {
-            mShowHiRes = true;
-            mShowStartCue = true;
-            mIsHoldToStartEnabled = true;
-            mIsHideTimeWhileRunning = false;
-            mHideTimeText = null;
-        }
-
         // FIXME: Remove this later:
         setBackgroundColor(Color.DKGRAY);
     }
@@ -360,12 +310,8 @@ public class TimerView extends View
      *     If the scale is less than 0.1 or greater than 10.0.
      */
     public void setDisplayScale(
-        @FloatRange(from = 0.1, to = 10.0) float newDisplayScale) throws
-        IllegalArgumentException {
-        // FIXME: Is there a reason why  this is not just built-in like the
-        // other preferences?
-        // FIXME: Should the "text offset" also be built in? Should none of
-        // these be built in at all? They probably just pollute the class.
+            @FloatRange(from = 0.1, to = 10.0) float newDisplayScale)
+            throws IllegalArgumentException {
 
         if (newDisplayScale < 0.1f || newDisplayScale > 10f) {
             throw new IllegalArgumentException(
@@ -379,10 +325,62 @@ public class TimerView extends View
     }
 
     /**
+     * Enables (or disables) the display of a high resolution elapsed solve time
+     * while the timer is running. This setting does not affect the display of
+     * the remaining inspection time and does not affect the display of the
+     * elapsed solve time if the timer is stopped. If stopped, the timer always
+     * displays the highest resolution solve time in accordance with WCA
+     * Regulations for rounding/truncation. High resolution times are shown by
+     * default.
+     *
+     * @param isEnabled
+     *     {@code true} to show a high resolution time (to 1/100ths of a second
+     *     where appropriate); or {@code false} to show a low resolution time
+     *     (to whole seconds), though only while the timer is running.
+     */
+    public void setHiResTimerEnabled(boolean isEnabled) {
+        mShowHiRes = isEnabled;
+    }
+
+    /**
+     * Enables (or disables) the display of a "start cue" when the timer is
+     * ready to start. If enabled, when the user touches down on the display
+     * the time value will change color to indicate that the timer will start
+     * as soon as that touch is lifted up. If hold-to-start behaviour is
+     * enabled, that color change will be delayed until the minimum hold
+     * duration has elapsed. The start cue is enabled by default and affects
+     * both the inspection time and the solve time. It is recommended that it
+     * be enabled if hold-to-start is behaviour is enabled, as that will ensure
+     * that the hold-to-start delay does not cause confusion.
+     *
+     * @param isEnabled
+     *     {@code true} to enable the start cue; or {@code false} to disable it.
+     */
+    public void setStartCueEnabled(boolean isEnabled) {
+        mShowStartCue = isEnabled;
+    }
+
+    /**
+     * Sets the static text to display to hide (or mask) the elapsed solve time
+     * while the timer is running. When the timer is stopped, reset, or in the
+     * hold-to-start or ready-to-start states, the elapsed solve time will be
+     * displayed as normal. This setting does not affect the display of the
+     * remaining inspection time. The default value is {@code null}.
+     *
+     * @param hideTimeText
+     *     The static text to display in place of the elapsed solve time while
+     *     the timer is running. If {@code null}, the solve time will not be
+     *     hidden while the timer is running.
+     */
+    public void setHideTimeText(String hideTimeText) {
+        mHideTimeText = hideTimeText;
+    }
+
+    /**
      * Highlights the inspection time value to provide the user with a cue
      * suggesting that the timer is ready to start. This will have no effect if
-     * the cue behaviour is disabled; or if the cue color is already set
-     * appropriately. If the color is changed, this view will be invalidated.
+     * the cue behaviour is disabled, or if the cue color already matches the
+     * required state. If the color is changed, this view will be invalidated.
      *
      * @param isCued
      *     {@code true} to highlight the text in a different color; or {@code
@@ -401,17 +399,16 @@ public class TimerView extends View
 
     /**
      * Highlights the solve time value to provide the user with a cue suggesting
-     * that the timer is ready to start. This will have no effect if the cue
-     * behaviour is disabled, unless the hold-to-start behaviour is enabled, as
-     * the latter takes precedence; or if the cue color is already set
-     * appropriately. If the color is changed, this view will be invalidated.
+     * that the timer is ready to start. This will have no effect if the start
+     * cue behaviour is disabled, or if the cue color already matches the
+     * required state. If the color is changed, this view will be invalidated.
      *
      * @param isCued
      *     {@code true} to highlight the text in a different color; or {@code
      *     false} to restore the normal text color.
      */
     public void cueSolveTime(boolean isCued) {
-        if (mShowStartCue || mIsHoldToStartEnabled) {
+        if (mShowStartCue) {
             final int newColor = isCued ? mCueColor : mNormalColor;
 
             if (newColor != mSolveTimePaint.getColor()) {
@@ -434,7 +431,7 @@ public class TimerView extends View
      *     The scale to apply to the solve time text in the range 0.0 to 1.0.
      */
     private void setSolveTimeScale(
-        @FloatRange(from = 0.0, to = 1.0) float scale) {
+            @FloatRange(from = 0.0, to = 1.0) float scale) {
         if (mSolveTimeScale != scale) {
             mSolveTimeScale = scale;
             invalidate();
@@ -449,7 +446,7 @@ public class TimerView extends View
      *     The scale to apply to the solve time text in the range 0.0 to 1.0.
      */
     private void scaleSolveTimeTo(
-        @FloatRange(from = 0.0, to = 1.0) float scale) {
+           @FloatRange(from = 0.0, to = 1.0) float scale) {
         if (DEBUG_ME) Log.d(TAG,
             "scaleSolveTimeTo(" + scale + "): from=" + mSolveTimeScale);
 
@@ -562,40 +559,35 @@ public class TimerView extends View
 
     @Override
     public long onTimerRefreshSolveTime(long elapsedTime, long refreshPeriod) {
-        final String newText;
+        mSolveTimeText.setLength(0);
 
-        if (mIsHideTimeWhileRunning) {
-            newText = mHideTimeText;
+        if (mHideTimeText != null) {
+            mSolveTimeText.append(mHideTimeText);
         } else {
-            newText = formatSolveTime(elapsedTime, mShowHiRes);
+            appendRunningSolveTime(mSolveTimeText, elapsedTime, mShowHiRes);
         }
 
-        // If the refresh period is less than the timer resolution (e.g., if
-        // the refresh period is 10 ms and the time is formatted to whole
-        // seconds), or if the time is being hidden while the timer runs, the
-        // text may not have changed and "invalidate()" is not needed.
-        if (!newText.equals(mSolveTimeText)) {
-            mSolveTimeText = newText;
-            invalidate();
-        }
+        // The refresh period probably reflects the timer resolution (or near
+        // enough), so each time "onTimerRefreshSolveTime()" is called the text
+        // will probably change. Therefore, always call "invalidate()" without
+        // going to the bother of trying to detect if the text actually changed.
+        invalidate();
 
         // >= 10 minutes or always low-resolution: present time in whole
         // seconds and set the refresh period to match. Use the default
         // ("-1") refresh period, which should be fast enough to show
         // 1/100ths of a second convincingly (it is set at c. 30 Hz).
-        return elapsedTime >= 600_000L || !mShowHiRes
-               || mIsHideTimeWhileRunning ? 1_000L : -1L;
+        return elapsedTime >= 600_000L || !mShowHiRes || mHideTimeText != null
+               ? 1_000L : -1L;
     }
 
     @Override
     public long onTimerRefreshInspectionTime(
             long remainingTime, long refreshPeriod) {
-        final String newText = formatInspectionTime(remainingTime);
 
-        if (!newText.equals(mInspectionTimeText)) {
-            mInspectionTimeText = newText;
-            invalidate();
-        }
+        mInspectionTimeText.setLength(0);
+        appendRunningInspectionTime(mInspectionTimeText, remainingTime);
+        invalidate();
 
         // At zero or lower, start updating every 0.1 seconds instead of 1.0
         // seconds. This must be done *at* zero, otherwise the refresh period
@@ -613,8 +605,8 @@ public class TimerView extends View
         // However, *both* times must be formatted to ensure they are ready if
         // an interaction presents both times before any further "onTimerSet"
         // or "onTimerRefresh**()" notifications.
-        mInspectionTimeText = formatInspectionTime(timerState);
-        mSolveTimeText      = formatSolveTime(timerState);
+        formatInspectionTime(timerState);
+        formatSolveTime(timerState);
 
         if (timerState.isInspectionEnabled() && !timerState.isReset()
             && !timerState.isStopped() && !timerState.isSolveRunning()) {
@@ -626,12 +618,16 @@ public class TimerView extends View
             cueInspectionTime(timerState.getRemainingInspectionTime() < 0);
             scaleSolveTimeTo(SCALE_SHOW_ONLY_INSPECTION_TIME);
         } else {
-            if (timerState.isStopped()) {
-                mHeadlineText = formatResultHeadline(timerState);
+            if (timerState.isStopped() && timerState.getSolve() != null
+                    && timerState.getSolve().getPenalties().hasPenalties()) {
+                // Only show the detailed result in the headline if there are
+                // penalties to be explained. Otherwise, keep it clean.
+                mHeadlineText = timerState.getSolve().toStringResult() + " =";
             } else if (timerState.isSolveRunning()) {
                 mHeadlineText = formatSolveRunningHeadline(timerState);
             } else {
-                // Timer is reset. TODO: Consider text like "Touch to start!"
+                // Timer is reset, or it is stopped with no penalties.
+                // TODO: Consider text like "Touch to start!"
                 mHeadlineText = null;
             }
 
@@ -665,7 +661,7 @@ public class TimerView extends View
         if (!timerState.isReset() && !timerState.isStopped()) {
             // One of the two timers is running (or is about to start running).
             if (!timerState.isInspectionEnabled()
-                || timerState.isSolveRunning()) {
+                    || timerState.isSolveRunning()) {
                 mHeadlineText = formatSolveRunningHeadline(timerState);
             } else {
                 // Timer is holding/ready to start inspection, or inspection is
@@ -678,44 +674,12 @@ public class TimerView extends View
         invalidate();
     }
 
-    private String formatResultHeadline(@NonNull TimerState timerState) {
-        final Penalties penalties = timerState.getPenalties();
-
-        // NOTE: The solve time in the headline does not include time penalties.
-        if (penalties.hasPreStartDNF()) {
-            // There will be no solve time (well, it is zero), but there may be
-            // "+2" penalties with the DNF. "\u00d7" is the multiply sign and
-            // looks better than "x" (the letter). "\u207a" is the superscript
-            // plus sign and looks better for the "+2" penalties.
-            // FIXME: Actually, the superscript plus looks terrible.
-            // FIXME? Not using "Penalty.PLUS_TWO.getDescription()" for now.
-            return String.format(Locale.US,
-                "\u207a2\u00d7%d + %s =",
-                penalties.getPreStartPlusTwoCount(),
-                Penalty.DNF.getDescription());
-        } else if (penalties.hasPostStartDNF()) {
-            return String.format(Locale.US,
-                "\u207a2\u00d7%d + %s + \u207a2\u00d7%d + %s =",
-                penalties.getPreStartPlusTwoCount(),
-                formatSolveTime(timerState.getElapsedSolveTime(), true),
-                penalties.getPostStartPlusTwoCount(),
-                Penalty.DNF.getDescription());
-        }
-
-        // Not a DNF.
-        return String.format(Locale.US,
-            "\u207a2\u00d7%d + %s + \u207a2\u00d7%d =",
-            penalties.getPreStartPlusTwoCount(),
-            formatSolveTime(timerState.getElapsedSolveTime(), true),
-            penalties.getPostStartPlusTwoCount());
-    }
-
     private String formatInspectionRunningHeadline(
             @NonNull TimerState timerState) {
         // Penalties are not shown in the headline during inspection, as the
         // display of the remaining inspection time is highlighted during
         // the "overrun" period, so a "+2" penalty can be inferred from
-        // that, rather than adding more clutter. If the penalty is a "DNF",
+        // that rather than adding more clutter. If the penalty is a "DNF",
         // then the timer will be stopped and inspection will not be running.
         return getContext().getString(R.string.inspection);
     }
@@ -732,85 +696,173 @@ public class TimerView extends View
         final int numPlusTwos = penalties.getPreStartPlusTwoCount()
                                 + penalties.getPostStartPlusTwoCount();
 
-        if (numPlusTwos > 0) {
-            return String.format(Locale.US, "\u207a2\u00d7%d", numPlusTwos);
+        if (numPlusTwos > 1) {
+            // "\u00d7", the multiply sign, looks better than the letter "x".
+            return "+" + numPlusTwos + "\u00d72s";
+        } else if (numPlusTwos > 0) {
+            return "+2s";
         }
 
         // No penalties were incurred.
         return null;
     }
 
-    private String formatSolveTime(@NonNull TimerState timerState) {
-        // If the timer is stopped, then the solve time must include any time
-        // penalties, otherwise the penalties are not included.
-        //
-        // If the timer is stopped, the time is shown to a high resolution
-        // (subject to the 10-minute limit). The preference to show a low
-        // resolution solve does not apply when the timer is stopped.
-        //
-        // If the solve timer is running, the time may be shown with a low or
-        // high resolution, or even masked and not shown at all.
+    /**
+     * Formats the solve time appropriately for the given timer state. The
+     * resolution and rounding of the time and the inclusion/exclusion of time
+     * penalties depends on whether or not the timer is stopped.
+     *
+     * @param timerState The current timer state.
+     */
+    private void formatSolveTime(@NonNull TimerState timerState) {
+        mSolveTimeText.setLength(0);
+
         if (timerState.isStopped()) {
-            // "getResultTime()" includes time penalties. Just show "DNF" if
-            // the is any DNF, though.
+            // If the timer is stopped, then the solve time must include any
+            // time penalties ("getResultTime()") and the time is always shown
+            // to a high resolution (subject to the 10-minute limit). The
+            // low-resolution preference does not apply when stopped.
             if (timerState.getPenalties().hasDNF()) {
-                return Penalty.DNF.getDescription();
+                mSolveTimeText.append(Penalty.DNF.getDescription());
+            } else {
+                // If stopped, formatting and rounding are performed following
+                // WCA Regulations for a "result" time. This may differ from
+                // the rounding/truncation that is used when the timer is
+                // running, so the more general "TimeUtils" method is used.
+                // Efficiency is not important here.
+                mSolveTimeText.append(
+                    TimeUtils.formatResultTime(timerState.getResultTime()));
             }
-            return formatSolveTime(timerState.getResultTime(), true);
-        }
-
-        if (timerState.isSolveRunning()) {
-            if (mIsHideTimeWhileRunning) {
-                return mHideTimeText;
+        } else if (timerState.isSolveRunning()) {
+            // If the solve timer is running, the time may be shown with a low
+            // or high resolution, or even masked and not shown at all.
+            if (mHideTimeText != null) {
+                mSolveTimeText.append(mHideTimeText);
+            } else {
+                // Rounding/truncation is different for a "running" timer. Use
+                // the local ad hoc method to do the rounding and formatting.
+                // It is also more efficient, which is important, as a running
+                // timer may be updated many times per second.
+                appendRunningSolveTime(mSolveTimeText,
+                    timerState.getElapsedSolveTime(), mShowHiRes);
             }
-            return formatSolveTime(
-                timerState.getElapsedSolveTime(), mShowHiRes);
+        } else {
+            // Probably reset, not started (solve), "holding" or ready, so
+            // format to full resolution, but do not include penalties. There
+            // could be a "+2" penalty incurred if the inspection period has
+            // overrun its normal time limit and that is not included until the
+            // timer is stopped.
+            appendRunningSolveTime(
+                mSolveTimeText, timerState.getElapsedSolveTime(), true);
         }
-
-        // Probably reset of not started, so format to full resolution, but do
-        // not include penalties. There could be a "+2" penalty incurred if the
-        // inspection period has overrun its normal time limit.
-        return formatSolveTime(timerState.getElapsedSolveTime(), true);
     }
 
-    private static String formatSolveTime(long time, boolean showHiRes) {
+    /**
+     * Formats the remaining inspection time. The text will be cleared if the
+     * inspection time should not be shown.
+     *
+     * @param timerState The timer state that provides the inspection time.
+     */
+    private void formatInspectionTime(@NonNull TimerState timerState) {
+        // Outside of the inspection period, clear the inspection time text to
+        // avoid confusion during scale transitions. "Inspection period"
+        // includes any hold-to-start or ready-to-start state before inspection
+        // starts, so "isInspectionRunning()" would not be the correct test.
+        mInspectionTimeText.setLength(0);
+
+        if (timerState.isInspectionEnabled() && !timerState.isReset()
+              && !timerState.isStopped() && !timerState.isSolveRunning()) {
+            appendRunningInspectionTime(
+                mInspectionTimeText, timerState.getRemainingInspectionTime());
+        }
+    }
+
+    /**
+     * Formats the solve time, rounding or truncating the value appropriately
+     * for a running timer and appends the text to a buffer.
+     *
+     * @param buffer
+     *     The buffer to which to append the formatted time value. This will
+     *     not be reset before appending the text.
+     * @param time
+     *     The time to be formatted (in milliseconds).
+     * @param showHiRes
+     *     {@code true} if the time should be formatted to a high resolution
+     *     (1/100ths of a second for values under 10 minutes); or {@code false}
+     *     if all values should be formatted to a low resolution of whole
+     *     seconds.
+     *
+     * @return The given {@code buffer}.
+     */
+    @VisibleForTesting
+    static StringBuilder appendRunningSolveTime(
+            @NonNull StringBuilder buffer, long time, boolean showHiRes) {
+        // NOTE: As this method be called many times per second when refreshing
+        // a high resolution time value, it is desirable that it be efficient.
+        // Object allocations need to be eliminated, as garbage collection will
+        // make the timer appear "jerky" if refreshing a resolution of 0.01 s.
+        // The required formats are quite simple, so ad hoc formatting will do.
+        // A "StringBuilder" eliminates "String" allocations.
+
         if (time >= 600_000L || !showHiRes) {
             // >= 10 minutes or always low-resolution: present time in whole
-            // seconds.
-            //
-            // Round the time to the nearest (or equal) whole second that is
-            // not greater than the time. This means that the elapsed does
-            // not change from, say, "10:00" to "10:01" until that extra
+            // seconds. Round the time to the nearest (or equal) whole second
+            // that is not greater than the time. This means that the elapsed
+            // does not change from, say, "10:00" to "10:01" until that extra
             // whole second has elapsed.
-            return new DateTime(WCAMath.floorToMultiple(time, 1_000L),
-                DateTimeZone.UTC).toString("m:ss");
+            final long tSecs = WCAMath.floorToMultiple(time, 1_000L) / 1_000L;
+
+            if (tSecs < 3_600L) {
+                // Format as "m:ss". No zero padding for the minutes. Show zero
+                // for the minutes, rather than formatting to just "s", as the
+                // latter might look a bit odd.
+                appendDigitsN(buffer, (int) (tSecs / 60L)).append(':');
+                appendDigits2(buffer, (int) (tSecs % 60L));
+            } else {
+                // Format as "h:mm:ss". No zero padding for the hours.
+                appendDigitsN(buffer, (int) (tSecs / 3_600L)).append(':');
+                appendDigits2(buffer, (int) (tSecs / 60L % 60L)).append(':');
+                appendDigits2(buffer, (int) (tSecs % 60L));
+            }
+        } else {
+            // < 10 minutes: show high-resolution time. Rounding similar to
+            // above, but to whole 1/100ths of a second (10 ms).
+            final long t100ths = WCAMath.floorToMultiple(time, 10L) / 10L;
+
+            if (t100ths < 6_000L) { // < 1 minute in 100ths
+                // Format as "s.SS". No zero padding for the seconds.
+                appendDigitsN(buffer, (int) (t100ths / 100L)).append('.');
+                appendDigits2(buffer, (int) t100ths);
+            } else {
+                // Format as "m:ss.SS". No zero padding for the minutes.
+                appendDigitsN(buffer, (int) (t100ths / 6_000L)).append(':');
+                appendDigits2(buffer, (int) (t100ths / 100L % 60L)).append('.');
+                appendDigits2(buffer, (int) t100ths);
+            }
         }
 
-        // < 10 minutes: show high-resolution time (which is enabled if this
-        // is reached).
-        //
-        // Rounding is like the above, but to a whole 1/100th second (10 ms).
-        final long t = WCAMath.floorToMultiple(time, 10L);
-
-        if (t < 60_000L) {
-            return new DateTime(t, DateTimeZone.UTC).toString("s.SS");
-        }
-
-        return new DateTime(t, DateTimeZone.UTC).toString("m:ss.SS");
+        return buffer;
     }
 
-    private static String formatInspectionTime(@NonNull TimerState timerState) {
-        if (!timerState.isInspectionEnabled() || timerState.isReset()
-            || timerState.isStopped() || timerState.isSolveRunning()) {
-            // Outside of the inspection period has ended, clear the inspection
-            // time text, to avoid confusion during scale transitions.
-            return null;
-        }
-
-        return formatInspectionTime(timerState.getRemainingInspectionTime());
-    }
-
-    private static String formatInspectionTime(long time) {
+    /**
+     * Formats the remaining inspection time, rounding or truncating the time
+     * appropriately for a running inspection countdown, and appends the text
+     * to a buffer.
+     *
+     * @param buffer
+     *     The buffer to which to append the formatted inspection time. This
+     *     will not be reset before appending the text.
+     * @param time
+     *     The remaining inspection time (in milliseconds). A negative value
+     *     indicates that the inspection countdown is overrun. The overrun
+     *     period lasts for 2 seconds before the countdown times out and the
+     *     result becomes an "DNF".
+     *
+     * @return The given {@code buffer}.
+     */
+    @VisibleForTesting
+    static StringBuilder appendRunningInspectionTime(
+            @NonNull StringBuilder buffer, long time) {
         if (time < 0) {
             // Time is overrun and is negative. Switch to a higher resolution
             // of 1/10th seconds (100 ms) to instill panic.
@@ -818,18 +870,116 @@ public class TimerView extends View
             // During the overrun, "time" goes from -1 ms to -2,000 ms. However,
             // this will be presented as running from "+2.0" to "+0.0". Rounding
             // to the "ceiling" ensures the time changes at the right instant.
-            return new DateTime(
-                WCAMath.ceilToMultiple(
-                    TimerState.INSPECTION_OVERRUN_DURATION + time, 100),
-                DateTimeZone.UTC).toString("'+'s.S");
+            //
+            // The value is "clipped" to ensure that any side effects of slow
+            // refresh notifications do not result in any overflow/underflow.
+            final int t10ths = (int) WCAMath.ceilToMultiple(
+                Math.min(TimerState.INSPECTION_OVERRUN_DURATION,
+                    Math.max(0, TimerState.INSPECTION_OVERRUN_DURATION + time)),
+                    100L) / 100;
+
+            // Format as "+s.S". Assume always only one digit for each field.
+            buffer.append('+');
+            appendDigits1(buffer, t10ths / 10).append('.');
+            appendDigits1(buffer, t10ths);
+        } else {
+            // Round the time to the nearest (or equal) whole second that is
+            // not less than the time. This means the countdown does not change
+            // from, say, "15" to "14" until a whole second has elapsed and the
+            // countdown ends exactly when "0" is reached, not one second, or
+            // one half second later.
+
+            // Format as "s". No zero padding. Assume it will fit an "int".
+            appendDigitsN(
+                buffer, (int) WCAMath.ceilToMultiple(time, 1_000L) / 1_000);
         }
 
-        // Round the time to the nearest (or equal) whole second that is not
-        // less than the time. This means that the countdown does not change
-        // from, say, "15" to "14" until a whole second has elapsed and the
-        // countdown ends exactly when "0" is reached, not one second, or one
-        // half second later. Formatting with "DateTime" would be overkill.
-        return Long.toString(WCAMath.ceilToMultiple(time, 1_000L) / 1_000L);
+        return buffer;
+    }
+
+    /**
+     * Appends a single decimal numeral to a buffer. The least significant
+     * decimal digit (representing the units position) is appended and any more
+     * significant digits are ignored. If the digit (or the value) is a zero,
+     * zero will be appended.
+     *
+     * @param buffer
+     *     The buffer to which to append exactly one decimal numeral.
+     * @param value
+     *     The value from which to derive the decimal digit. The behaviour is
+     *     not defined if the value is negative.
+     *
+     * @return
+     *     The given {@code buffer}.
+     */
+    @VisibleForTesting
+    static StringBuilder appendDigits1(
+            @NonNull StringBuilder buffer, int value) {
+        return buffer.append((char) ('0' + value % 10));
+    }
+
+    /**
+     * Appends two decimal numerals to a buffer. The two least significant
+     * decimal digits (representing the units and tens positions) are appended
+     * and any more significant digits are ignored. If the tens position is a
+     * zero, zero will be appended. For example, "12" is appended as "12", "3"
+     * (or "1203") is appended as "03", and "0" is appended as "00".
+     *
+     * @param buffer
+     *     The buffer to which to append exactly two decimal numerals.
+     * @param value
+     *     The value from which to derive the decimal digits. The behaviour is
+     *     not defined if the value is negative.
+     *
+     * @return
+     *     The given {@code buffer}.
+     */
+    @VisibleForTesting
+    static StringBuilder appendDigits2(
+            @NonNull StringBuilder buffer, int value) {
+        return buffer.append((char) ('0' + value / 10 % 10))
+                     .append((char) ('0' + value % 10));
+    }
+
+    /**
+     * Appends one or more decimal numerals to a buffer. The first (most
+     * significant) digit will not be a zero unless the value is zero and only
+     * one digit is appended (i.e., there is no left-padding with zeros). No
+     * grouping separators (e.g., thousands separators) are appended.
+     *
+     * @param buffer
+     *     The buffer to which to append at least one decimal numeral.
+     * @param value
+     *     The value from which to derive the decimal digits. Values from 1 to
+     *     {@code Integer.MAX_VALUE} are supported. The behaviour is not defined
+     *     if the value is negative.
+     *
+     * @return
+     *     The given {@code buffer}.
+     */
+    @VisibleForTesting
+    static StringBuilder appendDigitsN(
+            @NonNull StringBuilder buffer, int value) {
+        // Find the order of magnitude of the value. Start searching from the
+        // smaller values, as they are more likely. Stop at 1,000,000,000: a
+        // positive 32-bit "int" cannot hold values greater than that magnitude.
+        int mag
+            = value <            10 ?             1
+            : value <           100 ?            10
+            : value <         1_000 ?           100
+            : value <        10_000 ?         1_000
+            : value <       100_000 ?        10_000
+            : value <     1_000_000 ?       100_000
+            : value <    10_000_000 ?     1_000_000
+            : value <   100_000_000 ?    10_000_000
+            : value < 1_000_000_000 ?   100_000_000
+            :                         1_000_000_000;
+
+        do {
+            buffer.append((char) ('0' + value / mag % 10));
+        } while ((mag /= 10) >= 1);
+
+        return buffer;
     }
 
     @Override
@@ -851,7 +1001,7 @@ public class TimerView extends View
             mHeadlinePaint.setTextSize(headH * 0.7f);
             canvas.drawText(getClass().getSimpleName(),
                 cX, y + headH * 0.6f, mHeadlinePaint);
-            drawTimeText(canvas, "59:59.99", mTimeTextSize,
+            drawTimeText(canvas, SAMPLE_TIME_TEXT, mTimeTextSize,
                 cX, y + mTimeTextBaseline, mSolveTimePaint);
             return;
         }
@@ -908,10 +1058,23 @@ public class TimerView extends View
     }
 
     private static void drawTimeText(
-            @NonNull Canvas canvas, @Nullable String timeText, float textSize,
-            float centerX, float baselineY, @NonNull Paint paint) {
-        if (timeText != null && !timeText.isEmpty()) {
-            final int dotIdx = timeText.lastIndexOf('.');
+            @NonNull Canvas canvas, @NonNull StringBuilder timeText,
+            float textSize, float centerX, float baselineY,
+            @NonNull Paint paint) {
+
+        final int len = timeText.length();
+
+        if (len > 0) {
+            // "StringBuilder" does not have an efficient "lastIndexOf" method.
+            // What it has takes "String" and allocates "char[]", so....
+            int dotIdx = -1;
+
+            for (int i = len - 1; i >= 0; i--) {
+                if (timeText.charAt(i) == '.') {
+                    dotIdx = i;
+                    break;
+                }
+            }
 
             if (dotIdx > 0) {
                 // There is a decimal point with at least one digit before
@@ -935,7 +1098,7 @@ public class TimerView extends View
             } else {
                 paint.setTextSize(textSize);
                 paint.setTextAlign(Paint.Align.CENTER);
-                canvas.drawText(timeText, centerX, baselineY, paint);
+                canvas.drawText(timeText, 0, len, centerX, baselineY, paint);
             }
         }
     }

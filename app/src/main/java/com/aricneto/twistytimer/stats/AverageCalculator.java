@@ -509,8 +509,8 @@ public final class AverageCalculator {
                 // truncated arithmetic mean. "mCurrentSum" is the sum of all
                 // non-DNF times. Discard the best and worst time, using one
                 // DNF as the worst time if any DNFs are present, so at least
-                // one non-DNF time will remain after discarding the outliers
-                // . Discard all other DNFs, if any. One DNF may already have
+                // one non-DNF time will remain after discarding the outliers.
+                // Discard all other DNFs, if any. One DNF may already have
                 // been discarded as the worst time; do not discard it twice.
                 mCurrentAverage = WCAMath.roundAverage(
                     (mCurrentSum - mCurrentBestTime

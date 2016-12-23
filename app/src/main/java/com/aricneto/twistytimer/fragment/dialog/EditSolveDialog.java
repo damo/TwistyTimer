@@ -223,8 +223,7 @@ public class EditSolveDialog extends DialogFragment {
                         public void run() {
                             final Drawable scrambleImg
                                 = new ScrambleGenerator(mSolve.getPuzzleType())
-                                     .generateImageFromScramble(
-                                         mSolve.getScramble());
+                                     .generateImage(mSolve.getScramble());
 
                             // Must update image view on the main UI thread.
                             FireAndForgetExecutor.executeOnMainThread(
@@ -271,16 +270,16 @@ public class EditSolveDialog extends DialogFragment {
 
         mSolve = getArguments().getParcelable(ARG_SOLVE);
 
-        // The solve time is formatted with a smaller text size for the
-        // smallest time units. The correct rounding of the time is performed
-        // by "Solve.getTime()".
+        // The solve time is pretty-formatted with a smaller text size for the
+        // smallest time units. Let "prettyFormatResultTime()" do the rounding.
 
         // "mSolve" will not be null if "newInstance" was called. If null, it
         // is a bug.
         //noinspection ConstantConditions
-        timeText.setText(TimeUtils.formatResultPretty(mSolve.getTime()));
-        dateText.setText(new DateTime(mSolve.getDate())
-            .toString("d MMM y'\n'H':'mm"));
+        timeText.setText(
+            TimeUtils.prettyFormatResultTime(mSolve.getExactTime()));
+        dateText.setText(
+            new DateTime(mSolve.getDate()).toString("d MMM y'\n'H':'mm"));
 
         if (!mSolve.getPenalties().hasPenalties()) {
             penaltyText.setVisibility(View.GONE);

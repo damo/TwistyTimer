@@ -745,16 +745,19 @@ public class ChartStatistics {
         public String getFormattedValue(
                 float value, Entry entry, int dataSetIndex,
                 ViewPortHandler viewPortHandler) {
-            // "value" is in fractional seconds. Truncate to whole milliseconds,
-            // then round as a WCA "result" (usually truncated to whole
-            // 1/100ths), and format it as plain text. The initial truncation
-            // ensures that a time such as 24.2999 is correctly truncated per
-            // WCA Regulations to 24.29, the nearest (not greater) 0.01 s. If
-            // "value * 1000" were rounded (using "Math .round"), it would
-            // round 24.2999 s to 24,300 ms and then the WCA operation would
-            // not be correct, as it would yield 24.30 instead of 24.29.
-            return TimeUtils.formatTimeStatistic(
-                WCAMath.roundResult((long) (value * 1_000)));
+            // Initial truncation to whole milliseconds would ensure that a time
+            // such as 24.299999 was correctly truncated per WCA Regulations to
+            // 24.29, the nearest (not greater) 0.01 s. If "value * 1,000" were
+            // rounded (using "Math.round()"), it would round 24.299999 s to
+            // 24,300 ms and then the WCA operation would not be correct, as it
+            // would yield 24.30 instead of 24.29.
+            //
+            // HOWEVER, this app only records times as whole milliseconds.
+            // A value such as 24.299999 s most probably represents 24,300 ms,
+            // and the discrepancy is caused by a floating-point precision
+            // error. Therefore, it is more likely that *rounding* the value
+            // to the nearest millisecond is the correct thing to do.
+            return TimeUtils.formatResultTime(Math.round(value * 1_000.0));
         }
     }
 }

@@ -44,24 +44,79 @@ public class TimeUtils {
 
     /**
      * <p>
-     * Formats a time for a single puzzle solve attempt (a WCA "result" time).
-     * The time format includes mark-up to make it "pretty" and is suitable for
-     * presentation in the user interface in a view that supports
-     * {@code android.text.Spanned} text ({@code android.widget.TextView}, for
-     * example). The time field displaying the units of smallest magnitude will
-     * be presented using a smaller text size relative to the other fields. The
+     * Formats a time for a single puzzle solve attempt (a WCA "result" time)
+     * as a plain string. The format is suitable for presentation in tables of
+     * statistics showing best or worst results, or when sharing result times
+     * in short messages. To format an average-of-N or mean time, call
+     * {@link #formatAverageTime(long)}, as the WCA Regulations for rounding
+     * average or mean times are different from those for result times.
+     * </p>
+     * <p>
+     * If the time is {@link Statistics#TIME_UNKNOWN}, "--" will be returned;
+     * if the time is {@link Statistics#TIME_DNF}, "DNF" is returned. This
+     * allows that a result time, such as the "best result" or "worst result",
+     * may be "unknown" until some solve times have been recorded and may, even
+     * then, be a "DNF" until some non-DNF results are recorded.
+     * </p>
+     * <p>
+     * The given {@code resultTime} value will be rounded/truncated in
+     * accordance with WCA Regulations for result times before it is formatted.
+     * Rounding/truncation is performed by {@link WCAMath#roundResult(long)}.
+     * See the description of that class and method for more details on the
+     * regulations and how they are applied.
+     * </p>
+     * <p>
+     * The formatting applied by this method is not suitable when formatting
+     * the value of a running timer, as special rounding/truncation is required
+     * in that context. Such formatting is better implemented <i>ad hoc</i>.
+     * </p>
+     *
+     * @param resultTime
+     *     The result time to be formatted (in milliseconds). This can be
+     *     expressed with millisecond precision, as it will be rounded by this
+     *     method before it is formatted.
+     *
+     * @return
+     *     The plain string representation of the result time.
+     *
+     * @throws IllegalArgumentException
+     *     If the time is negative (other than the special values described
+     *     above, which may be represented as negative "flag" times).
+     */
+    public static String formatResultTime(long resultTime)
+            throws IllegalArgumentException {
+        assertTimeIsNotNegative(resultTime);
+
+        return formatTime(
+            resultTime == TIME_DNF || resultTime == TIME_UNKNOWN
+                ? resultTime : WCAMath.roundResult(resultTime),
+            "k':'mm':'ss",
+                 "m':'ss",
+                 "m':'ss'.'SS",
+                      "s'.'SS");
+    }
+
+    /**
+     * <p>
+     * Formats a time for a single puzzle solve attempt (a WCA "result" time)
+     * with mark-up to make it look "pretty". The result is suitable for
+     * presentation in the user interface in a view that supports text as a
+     * {@code android.text.Spanned} (e.g., {@code android.widget.TextView}).
+     * The time field displaying the units of smallest magnitude will be
+     * presented using a smaller text size relative to the other fields. The
      * units of smallest magnitude depend on the magnitude of the time. For
      * times under ten minutes, the smallest units are hundredths of a second.
      * For times over ten minutes, the smallest units are whole seconds.
      * </p>
      * <p>
-     * The time value should be rounded/truncated in accordance with WCA
-     * Regulations <i>before</i> passing it to this method. For example, the
-     * value from {@link Solve#getTime()} is already rounded correctly.
+     * The given {@code resultTime} is rounded in the same manner as described
+     * for {@link #formatResultTime(long)}.
      * </p>
      *
-     * @param time
-     *     The result time to be formatted (in milliseconds).
+     * @param resultTime
+     *     The result time to be formatted (in milliseconds). This can be
+     *     expressed with millisecond precision, as it will be rounded by this
+     *     method before it is formatted.
      *
      * @return
      *     The formatted time in a {@code Spanned} object that includes mark-up
@@ -76,11 +131,13 @@ public class TimeUtils {
     // API 16+ and the suggested replacement method, "Html.fromHtml(String,int)"
     // is not available before API 24.
     @SuppressWarnings("deprecation")
-    public static Spanned formatResultPretty(long time)
+    public static Spanned prettyFormatResultTime(long resultTime)
             throws IllegalArgumentException {
-        assertTimeIsReal(time); // Throws IAE if TIME_DNF, TIME_UNKNOWN or -ve.
+        assertTimeIsReal(resultTime); // IAE if TIME_DNF, TIME_UNKNOWN or -ve.
 
-        return Html.fromHtml(formatTime(time,
+        return Html.fromHtml(
+            formatTime(
+                WCAMath.roundResult(resultTime),
                 "k':'mm'<small>:'ss'</small>'",
                      "m'<small>:'ss'</small>'",
                      "m':'ss'<small>:'SS'</small>'",
@@ -89,197 +146,91 @@ public class TimeUtils {
 
     /**
      * <p>
-     * Formats a time for an active puzzle solve attempt presented in an
-     * on-screen "chronometer". The time format includes "pretty" mark-up as
-     * described in {@link #formatResultPretty(long)}, except that if a
-     * low-resolution time is showing only the (whole) seconds field, that
-     * single field is not displayed in a smaller text size.
-     * </p>
-     * <p>
-     * For a chronometer, it is most appropriate that the time be
-     * <i>truncated</i> to the nearest (not greater) unit of resolution.
-     * Truncation ensures, for example, that a chronometer showing time in
-     * whole seconds does not "tick" to the next second when it passes the
-     * half-way point between two second; it will only "tick" when the full
-     * second has elapsed. As the displayed resolution of the time varies
-     * with the magnitude of the time passed to this method, the necessary
-     * truncation will be performed by this method before formatting the time.
-     * </p>
-     * <p>
-     * A chronometer, such as
-     * {@link com.aricneto.twistytimer.layout.ChronometerMilli} also keeps a
-     * record of penalties to be applied to the time and may include
-     * indications in the time text of these penalties, or replace the text
-     * entirely for some penalties. To support this, the current penalty can
-     * be identified and the formatted time will be simply "DNF" if the
-     * penalty is a DNF, or will have a small "+" appended if the penalty is
-     * a two-second penalty. It is up to the chronometer to decide to include
-     * that penalty in the {@code time}, or not.
-     * </p>
-     * <p>
-     * An option is also given to allow the chronometer to show a high- or low-resolution time.
-     * (This supports one of the application's settings.)
-     * </p>
-     *
-     * @param time
-     *     The time to be formatted (in milliseconds). No rounding or truncation is necessary.
-     * @param showHiRes
-     *     {@code true} to show the time to a high resolution of 100ths of a second (for times
-     *     under 10 minutes); or {@code false} to show times to a low resolution of whole seconds
-     *     times of all magnitudes.
-     * @param penalty
-     *     The current penalty applying to the chronometer's time value.
-     *
-     * @return
-     *     The formatted time in a {@code Spanned} object that includes mark-up to make the time
-     *     look "pretty" and include penalty indicators.
-     *
-     * @throws IllegalArgumentException
-     *     If the time is negative, or one of the special values {@link Statistics#TIME_DNF} or
-     *     {@link Statistics#TIME_UNKNOWN}; these values are <i>not</i> supported. However, a
-     *     DNF can be notified using {@code penalty}.
-     */
-    @SuppressWarnings("deprecation") // Same reason as "formatResultPretty".
-    public static Spanned formatChronoTime(long time, boolean showHiRes, Penalty penalty)
-            throws IllegalArgumentException {
-        assertTimeIsReal(time); // Throws IAE if TIME_DNF, TIME_UNKNOWN or negative.
-
-        final String text;
-
-        if (penalty == Penalty.DNF) {
-            text = Penalty.DNF.getDescription();
-        } else {
-            final boolean isLT10Mins = time / MS_IN_M < 10L;
-
-            // Truncate to 1 s (1,000 ms) or 0.01 s (10 ms) depending on the magnitude of the time
-            // and the resolution to be shown. The 10-minute threshold matches the point at which
-            // the format strings (below) switch from 100ths to whole seconds. Keep them in sync.
-            final long chronoTime
-                    = WCAMath.floorToMultiple(time, showHiRes && isLT10Mins ? 10L : 1_000L);
-
-            text = formatTime(chronoTime,
-                           "k':'mm'<small>:'ss'</small>'",
-                                "m'<small>:'ss'</small>'",
-                    showHiRes ? "m':'ss'<small>:'SS'</small>'" // High-res < 10 mins.
-                              : "m'<small>:'ss'</small>'",             // Low-res  < 10 mins.
-                    showHiRes ?             "s'<small>.'SS'</small>'"  // High-res <  1 min.
-                              :             "s")                       // Low-res  <  1 min.
-                    + (penalty == Penalty.PLUS_TWO ? " <small>+</small>" : "");
-        }
-
-        return Html.fromHtml(text);
-    }
-
-    /**
-     * Indicates if, for the same parameters,
-     * {@link #formatChronoTime(long, boolean, Penalty)} will return a
-     * high-resolution time for display. A high-resolution time displays the
-     * value to 100ths of a second. This may be useful when determining how
-     * often to update the displayed time.
-     *
-     * @param time
-     *     The time to be tested (in milliseconds). No rounding or truncation
-     *     is necessary.
-     * @param showHiRes
-     *     {@code true} to show the time to a high resolution of 100ths of a
-     *     second (for times under 10 minutes); or {@code false} to show
-     *     times to a low resolution of whole seconds times of all magnitudes.
-     * @param penalty
-     *     The current penalty applying to the chronometer's time value.
-     *
-     * @return
-     *     {@code true} if {@code showHiRes} is {@code true} and {@code penalty}
-     *     is not {@code DNF} and the time is less than ten minutes.
-     */
-    public static boolean isChronoShowingHiRes(
-            long time, boolean showHiRes, Penalty penalty) {
-        // NOTE: This method it not in "ChronometerMilli", as it it closely
-        // tied to the chosen time formats in "formatChronoTime" (in this
-        // class). Aside from the "showHiRes" and "penalty" parameters, it is
-        // the magnitude of the time and whether or not the format strings in
-        // the other method include "s.SS" or just "s" that matters.
-        return showHiRes && penalty != Penalty.DNF && time / MS_IN_M < 10L;
-    }
-
-    /**
-     * <p>
-     * Formats the given result, average (or mean) time to a plain string
-     * with the regulation WCA resolution. Times of ten minutes or over are
-     * formatted to whole seconds, while times under ten minutes are
-     * formatted to hundredths of a second. However, there are different
-     * regulations for the rounding of "results" <i>versus</i> "averages" and
-     * "means", so the given value must be rounded appropriately
-     * <i>before</i> it is passed to this method for formatting. The format
+     * Formats the given average (or mean) time to a plain string. The format
      * is suitable for presentation in tables of statistics, or when sharing
-     * result/average times in short messages.
+     * average times in short messages. To format a result time, call
+     * {@link #formatResultTime(long)}, as the WCA Regulations for rounding
+     * result times are different from those for average or mean times.
      * </p>
      * <p>
      * If the time is {@link Statistics#TIME_UNKNOWN}, "--" will be returned;
      * if the time is {@link Statistics#TIME_DNF}, "DNF" is returned. This
      * allows that an average time may be "unknown" until it enough solve
      * times have been recorded and may, even then, be a "DNF" if too many of
-     * the recorded times are DNFs. Similarly, in a table of statistics, the
-     * most recent time may be "unknown" until the first time is recorded and
-     * may then be "DNF". This is slightly different from other presentations
-     * of "DNF" results, as a table of statistics may not have room to show
-     * the recorded time <i>and</i> an separate penalty indication (such as
-     * when viewing individual times in the {@code EditSolveDialog}).
+     * the recorded times are DNFs.
+     * </p>
+     * <p>
+     * The given {@code averageTime} value will be rounded/truncated in
+     * accordance with WCA Regulations for average or mean times before it is
+     * formatted. Rounding/truncation is performed by
+     * {@link WCAMath#roundAverage(long)}. See the description of that class
+     * and method for more details on the regulations and how they are applied.
      * </p>
      *
-     * @param time
-     *     The time value in milliseconds. The time should first be rounded
-     *     in accordance with WCA Regulations for "results" or for
-     *     "averages"/"means", whichever is appropriate.
+     * @param averageTime
+     *     The average time value in milliseconds. This can be expressed with
+     *     millisecond precision, as it will be rounded by this method before
+     *     it is formatted.
      *
      * @return
-     *     The string representation of the time for presentation as a
-     *     statistic.
+     *     The plain string representation of the average time.
      *
      * @throws IllegalArgumentException
      *     If the time is negative (other than the special values described
      *     above, which may be represented as negative "flag" times).
      */
-    public static String formatTimeStatistic(long time)
+    public static String formatAverageTime(long averageTime)
             throws IllegalArgumentException {
-        assertTimeIsNotNegative(time);
+        assertTimeIsNotNegative(averageTime);
 
-        return formatTime(time,
-                "k':'mm':'ss",
-                     "m':'ss",
-                     "m':'ss'.'SS",
-                          "s'.'SS");
+        return formatTime(
+            averageTime == TIME_DNF || averageTime == TIME_UNKNOWN
+                ? averageTime : WCAMath.roundAverage(averageTime),
+            "k':'mm':'ss",
+                 "m':'ss",
+                 "m':'ss'.'SS",
+                      "s'.'SS");
     }
 
     /**
-     * Formats the given time to a plain string with a low resolution of
+     * <p>
+     * Formats the given result time to a plain string with a low resolution of
      * whole seconds for all times. This is useful for presenting histograms
      * of times that fall into one-second frequency "buckets", or for
-     * labeling the time axis of the chart.
+     * labeling the time axis when charting solve times.
+     * </p>
+     * <p>
+     * The given {@code resultTime} is rounded in the same manner as described
+     * for {@link #formatResultTime(long)}, though it will never be formatted
+     * to show fractions of a second.
+     * </p>
      *
-     * @param time
-     *     The time value in milliseconds. The value will be rounded to the
-     *     nearest whole second when formatted. To truncate to the nearest
-     *     (not greater) whole second, round this value <i>before</i> passing
-     *     it to this method. The value {@link Statistics#TIME_DNF} is
-     *     supported.
+     * @param resultTime
+     *     The result time value in milliseconds. The formatted value will be
+     *     rounded to the nearest whole second. To truncate to the nearest (not
+     *     greater) whole second, truncate this value <i>before</i> passing it
+     *     to this method, so that the required value will not be rounded in an
+     *     unwanted manner. The value {@link Statistics#TIME_DNF} is supported.
      *
      * @return
-     *     The string representation of the time.
+     *     The low-resolution string representation of the result time.
      *
      * @throws IllegalArgumentException
-     *     If the time is negative, or the special value
-     *     {@link Statistics#TIME_UNKNOWN}.
+     *     If the time is negative (other than {@code TIME_DNF}), or the special
+     *     value {@link Statistics#TIME_UNKNOWN}.
      */
-    public static String formatTimeLoRes(long time) {
+    public static String formatResultTimeLoRes(long resultTime) {
         // The histogram may show "DNF" as a "bucket", but never "TIME_UNKNOWN".
-        assertTimeIsNotNegative(time);
-        assertTimeIsNotUnknown(time);
+        assertTimeIsNotNegative(resultTime);
+        assertTimeIsNotUnknown(resultTime);
 
-        return formatTime(time,
-                "k':'mm':'ss",
-                     "m':'ss",
-                     "m':'ss",
-                          "s");
+        return formatTime(
+            resultTime == TIME_DNF
+                ? resultTime : WCAMath.roundResult(resultTime),
+            "k':'mm':'ss",
+                 "m':'ss",
+                 "m':'ss",
+                      "s");
     }
 
     /**
@@ -289,13 +240,14 @@ public class TimeUtils {
      * time value using {@link #parseTimeExternal(String)}. There is no hours
      * field, so the minutes field value can exceed 59.
      *
-     * @param time
-     *     The time value in milliseconds. This must <i>not</i> be rounded.
-     *     The full precision (to the millisecond) should be given to ensure
-     *     that the time value is not changed when exported and then
-     *     re-imported, allowing proper detection of duplicate times. The value
-     *     should come straight from the database record, or from
-     *     {@link Solve#getExactTime()} (<i>not</i> {@code Solve.getTime()}).
+     * @param exactTime
+     *     The exact time value in milliseconds. This must <i>not</i> be
+     *     rounded or truncated. The full precision (to the millisecond) must
+     *     be given to ensure that the time value is not changed when exported
+     *     and then re-imported, allowing proper detection of duplicate times.
+     *     The value should come straight from a database solve record, or from
+     *     {@link Solve#getExactTime()} (<i>not</i> {@code Solve.getTime()},
+     *     which returns a rounded value).
      *
      * @return
      *     The string representation of the time.
@@ -305,12 +257,15 @@ public class TimeUtils {
      *     {@link Statistics#TIME_DNF} or {@link Statistics#TIME_UNKNOWN};
      *     these values are <i>not</i> supported.
      */
-    public static String formatTimeExternal(long time) {
-        return formatTime(time,
-                "m':'ss'.'SSS",
-                "m':'ss'.'SSS",
-                "m':'ss'.'SSS",
-                     "s'.'SSS");
+    public static String formatTimeExternal(long exactTime) {
+        assertTimeIsReal(exactTime);
+
+        return formatTime(
+            exactTime,
+            "m':'ss'.'SSS",
+            "m':'ss'.'SSS",
+            "m':'ss'.'SSS",
+                 "s'.'SSS");
     }
 
     /**
@@ -350,8 +305,10 @@ public class TimeUtils {
      *
      * @param time
      *     The time (duration) to be formatted. The value is in milliseconds.
-     *     For "unknown" times, such as the time reported for an average-of-N
-     *     times when less than "N" times have been recorded, use
+     *     The value will not be rounded or truncated before formatting, though
+     *     the formatting will round to the nearest whole unit of smallest
+     *     magnitude. For "unknown" times, such as the time reported for an
+     *     average-of-N times when less than "N" times have been recorded, use
      *     {@code TIME_UNKNOWN} (formatted as "--"). For did-not-finish solve
      *     times, use {@code TIME_DNF} (formatted as "DNF"). Negative times are
      *     not supported.
@@ -439,8 +396,8 @@ public class TimeUtils {
             if (colonIdx != -1) {
                 if (colonIdx > 0 && colonIdx < timeStr.length()) {
                     // At least one digit for the minutes, so still a valid
-                    // time format. Format is expected to be "M:S.s" (zero
-                    // padding to "MM" and "SS" is optional).
+                    // time format. Format is expected to be "m:s.S" (zero
+                    // padding to "mm" and "ss" is optional).
                     final int minutes
                         = Integer.parseInt(timeStr.substring(0, colonIdx));
                     final float seconds
@@ -452,8 +409,9 @@ public class TimeUtils {
                     } // else "parsedTime" stays zero as seconds >= 60.
                 } // else "parsedTime" stays zero: nothing before or after ":".
             } else {
-                // Format is expected to be "S.s", with arbitrary precision and
-                // padding.
+                // Format is expected to be "s.S", with arbitrary precision and
+                // padding. Round to eliminate precision errors (e.g., 24.299999
+                // will be interpreted as "24,300 ms".
                 parsedTime = Math.round(
                     Float.parseFloat(timeStr.substring(colonIdx + 1)) * 1_000f);
             }

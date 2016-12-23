@@ -131,6 +131,8 @@ public class TimerMainFragment extends BaseMainFragment
             = new TTFragmentBroadcastReceiver(this, CATEGORY_UI_INTERACTIONS) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
+            if (DEBUG_ME) Log.d(TAG, "onReceiveWhileAdded(): " + intent);
+
             switch (intent.getAction()) {
                 case ACTION_HIDE_TOOLBAR:
                     setTabSwitchingEnabled(false);
@@ -138,6 +140,10 @@ public class TimerMainFragment extends BaseMainFragment
                     break;
 
                 case ACTION_SHOW_TOOLBAR:
+                    // NOTE: If "ACTION_HIDE_TOOLBAR" is received before
+                    // "showToolbar()" completes its animation, this "Runnable"
+                    // will not be executed and "ACTION_TOOLBAR_RESTORED" will
+                    // not be broadcast.
                     mvMainRoot.showToolbar(new Runnable() {
                         @Override
                         public void run() {

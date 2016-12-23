@@ -208,11 +208,10 @@ class JointTimerState implements Parcelable {
             throw new IllegalStateException("The solve was never set.");
         }
 
-        mCurrentState.setSolve(
-            // The elapsed time that is set includes any time penalties.
-            solve.withTime(mCurrentState.getResultTime())
-                 .withPenalties(mCurrentState.getPenalties())
-                 .withDate(System.currentTimeMillis()));
+        mCurrentState.setSolve(solve
+            .withTimeExcludingPenalties(mCurrentState.getElapsedSolveTime())
+            .withPenaltiesAdjustingTime(mCurrentState.getPenalties())
+            .withDate(System.currentTimeMillis()));
 
         // Erase the previous state. Bit of a no-op, but it avoids confusion.
         mPreviousState = mPrototypeState.newUnusedState();

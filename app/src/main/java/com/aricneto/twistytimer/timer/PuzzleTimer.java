@@ -1020,6 +1020,57 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 "Solve must not be null when timer is stopped.");
         }
 
+        // FIXME: If "onSolveStop(Solve)" performed a synchronous save
+        // operation, then it might not be very obvious that "onSolveChanged()"
+        // needs to be called to ensure the timer is holding the "Solve"
+        // instance that now has a database ID, particularly if the synchronous
+        // operation does not broadcast "ACTION_ONE_SOLVE_ADDED".
+        //
+        // There are problems that need to be overcome:
+        //
+        //  o If "onSolveStop()" were to return the "Solve" instance that may
+        //    have been updated by a synchronous save, then "onSolveChanged()"
+        //    cannot be called from here, as the timer stage is probably at
+        //    "STOPPING", not "STOPPED", so that would be an error.
+        //
+        //  o "onSolveStop()" cannot call "onSolveChanged()" directly for the
+        //    same reason: the timer is probably "STOPPING", not "STOPPED".
+        //
+        // However, "onSolveChanged()" is an asynchronous method, so the call
+        // to "fireOnSolveStop()" will return before "onSolveChangedSync()" is
+        // called, so the state *would* be "STOPPED" when "onSolveChangedSync()"
+        // is called *if* "isStopped()" were not tested in "onSolveChanged()"
+        // before the command message is queued. Checking "isStopped()" from
+        // "onSolveChangedSync()" would be a problem if an error needed to be
+        // thrown, as it could not be easily handled. OTOH, a) it would be a
+        // bug that needed fixing, so graceful handling is not really needed,
+        // and b) it could just not throw an exception and log an error message
+        // and ignore the change instead. The problem with "b)" is that it
+        // would make bugs harder to detect, so perhaps it should just throw a
+        // wobbler.
+        //
+        // One solution might be to take a returned "Solve" and then use a
+        // different "onSolveChanged()" method to queue the command message
+        // without performing any "isStopped" test. This would be safe as this
+        // "fireOnSolveStop()" method is only called when "STOPPING" is about
+        // to transition to "STOPPED".
+        //
+        // A problem with invoking "onSolveChanged()" at this early point is
+        // that "onTimerSet()" would be called back and it is going to be called
+        // back anyway on transitioning to "STOPPED". Would that redundancy be
+        // much of an issue? After all, if the save were asynchronous, the it
+        // would eventually result in "onSolveChanged()" being called and that
+        // would trigger "onTimerSet()", even if that was already called just
+        // before on the transition to "STOPPED".
+        //
+        // All of this could be simplified by ensuring that the stage is at
+        // "STOPPED" when "onSolveStop()" is called, so any call it makes to
+        // "onSolveChanged" happens when "isStopped()" reports true. That, in
+        // itself, might be a bit messy to implement, but would be simpler if
+        // the sequencing of the calls were changed so that "onSolveStop" is
+        // called after "onTimerSet", not before it. "onTimerSet" is going to
+        // be called again after "onSolveChanged()", in any event.
+
         mSolveHandler.onSolveStop(solve);
     }
 
@@ -1391,35 +1442,17 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
             case STOPPING:
                 fireOnTimerCue(CUE_STOPPING);
                 // Update the "Solve" with the elapsed time, penalties and
-                // date-time stamp with a call to "commit()" before calling
-                // "onSolveStop". The transition to "STOPPED" fires the call
-                // to "onTimerSet" that marks the end of this solve attempt.
-                // If "onSolveStop" launches a background task to save the
-                // solve, the timer is guaranteed to have transitioned from
-                // "STOPPING" to "STOPPED" before that task is handled, as the
-                // transition here is synchronous on the main thread and the
-                // result of a background task cannot be delivered to the main
-                // thread until after this "atomic" transition to "STOPPED"
-                // completes. Of course, if the task reports back very late,
-                // the timer could have moved on to a new solve attempt.
+                // date-time stamp with a call to "commit()". The transition to
+                // "STOPPED" fires the call to "onTimerSet" that marks the end
+                // of this solve attempt. "onSolveStop(Solve)" is then called
+                // to allow the timer's referenced "Solve" to be saved. When it
+                // is saved (which can be done asynchronously) and is assigned
+                // a database record ID, "PuzzleTimer.onSolveChanged(Solve)"
+                // must be called (if the timer is still stopped) to ensure
+                // that this timer's referenced "Solve" includes that new ID.
                 mJointState.commit();
-                // FIXME: Not very comfortable with the fact that "onSolveStop"
-                // is called when the timer state is "STOPPING". While no
-                // "TimerState" is passed to "onSolveStop", it is still possible
-                // that an implementation might call "PuzzleTimer.getTimerState"
-                // and then "TimerState.isStopped()" might return "false" and
-                // cause confusion. A simple, if inelegant, approach would be
-                // to "transitionTo(STOPPED)" first, then call "onSolveStop"
-                // and "onTimerSet", in that order. "onTimerSet" would then be
-                // called before and after "onSolveStop". This, though, might
-                // also be confusing, as "onTimerSet" would be called twice when
-                // it is "STOPPED", but the solve will not have been passed to
-                // "onSolveStop" for that first call. Would that be a problem?
-                // Alternatively, just document that implementations of
-                // "onSolveStop" should not access "PuzzleTimer.getTimerState",
-                // as the state is in the middle of a transition.
+                transitionTo(STOPPED); // Triggers "onTimerSet()".
                 fireOnSolveStop();
-                transitionTo(STOPPED);
                 break;
 
             case STOPPED:
@@ -1826,7 +1859,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     // FIXME: May want to check if implementations need to be told to use a
     // handler, or may need to add more indirection here, anyway.
     // FIXME: NOTE: Adding a "Handler" layer here could make the class harder
-    // to test (though I could just defer to "onTickSync".
+    // to test (though one could just directly test "onTickSync()").
     @Override
     public void onTick(@TickID int tickID) {
         // See comment in "setUp" and the description of "wake()": if some
@@ -2194,7 +2227,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     // methods that may update the user interface are expected.
     @UiThread
     public void sleep() {
-        if (DEBUG_ME) Log.w(TAG, "sleep(): isAwake=" + isAwake());
+        if (DEBUG_ME) Log.d(TAG, "sleep(): isAwake=" + isAwake());
         if (isAwake()) {
 
             // "onTouchCancelledSync()" must be called while the timer is awake,
@@ -2253,7 +2286,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * </p>
      */
     public void wake() {
-        if (DEBUG_ME) Log.w(TAG, "wake(): isAwake=" + isAwake());
+        if (DEBUG_ME) Log.d(TAG, "wake(): isAwake=" + isAwake());
 
         // NOTE: Check "isAwake()" in "wakeSync()", in case the state changes
         // while queued.
@@ -2266,7 +2299,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * its sleep state. The command event is queued by {@link #wake()}.
      */
     private void wakeSync() throws IllegalStateException {
-        if (DEBUG_ME) Log.w(TAG, "wakeSync(): isAwake=" + isAwake());
+        if (DEBUG_ME) Log.d(TAG, "wakeSync(): isAwake=" + isAwake());
         if (!isAwake()) {
             // Set "mIsAwake" first, as this allows timer cues, etc. to fire
             // during "setUp".
