@@ -228,6 +228,8 @@ public class TimerFragment extends BaseMainFragment
         public void onReceiveWhileAdded(Context context, Intent intent) {
             if (DEBUG_ME) Log.d(TAG, "onReceiveWhileAdded(): " + intent);
 
+            TTIntent.validate(intent);
+
             switch (intent.getAction()) {
                 case ACTION_TOOLBAR_RESTORED:
                     showItems();
@@ -301,19 +303,19 @@ public class TimerFragment extends BaseMainFragment
             // applied by calling "PuzzleTimer.onSolveChanged(Solve)" or
             // "PuzzleTimer.reset()". These will cause "onTimerSet(TimerState)"
             // to be called back on this fragment and the changes will be
-            // applied to the UI by that method (and only by that method).
+            // applied to the UI by that method---and only by that method.
             //    If the timer is running, it might be cancelled and then roll
             // back to the "previous" solve result. However, until the result
             // is rolled back, no action is taken to verify if changes to the
             // solves in the database affect that "previous" solve. After the
-            // roll-back, "onTimerSet" will be called and a verification task
+            // roll-back, "onTimerSet()" will be called and a verification task
             // will be initiated to ensure that the "previous" solve still
             // exists and that its details are up-to-date. This keeps things
             // nice and simple: only the current solve is ever verified and
             // that is only necessary if the timer is stopped. The only caveat
             // is that "mValidatedSolveID" needs to be cleared in cases where
             // it might record the ID of the "previous" solve. If it were not
-            // cleared, then "onTimerSet" would not trigger the necessary
+            // cleared, then "onTimerSet()" would not trigger the necessary
             // verification task if the running solve attempt were cancelled
             // and rolled back to the "previous" solve result. The simplest
             // approach is to clear "mValidatedSolveID" in "onSolveStart()",
@@ -875,14 +877,14 @@ public class TimerFragment extends BaseMainFragment
         // this may not be the first time that "onStart()" has been called.
         // "SettingsActivity" may have been started and some preferences may
         // have changed, so now is the time to apply the up-to-date values of
-        // the shared preferences to the views and other components.
+        // those preferences to the views and other components.
 
         // Inject the up-to-date inspection duration and hold-to-start flag
         // into the puzzle timer. If the instance state was restored in
         // "onActivityCreated()", the up-to-date values will be used for any
         // *new* solve attempts. If the timer was running when its state was
         // saved, the old preference values will be used until the completion
-        // of that solve attempt.
+        // of that restored solve attempt.
 
         mTimer.setInspectionDuration(
             Prefs.getBoolean(R.string.pk_inspection_enabled,
@@ -1009,11 +1011,11 @@ public class TimerFragment extends BaseMainFragment
     }
 
     /**
-     * Saves the instance state of this fragment. The instance state is
-     * primarily the current timer state. The state is restored in
-     * {@link #onActivityCreated(Bundle)}, if the saved state is passed to
-     * that method. It is typically saved just before {@link #onStop()} is
-     * called.
+     * Saves the instance state of this fragment. The instance state includes
+     * the current timer state and any unsolved scramble sequence. The state is
+     * restored in {@link #onActivityCreated(Bundle)}, if the saved state is
+     * passed to that method. The state is typically saved just before
+     * {@link #onStop()} is called.
      *
      * @param outState The bundle in which to save the instance state.
      */
@@ -1029,6 +1031,22 @@ public class TimerFragment extends BaseMainFragment
         // However, it will (probably) survive simple cases, such as hitting
         // "Home" and returning to the app. Persisting the timer state for a
         // longer period is also viable if the timer is "STOPPED".
+        //
+        // FIXME: An approach to "fixing" this might be to implement some sort
+        // of "hibernate" functionality in "PuzzleTimer" and/or "TimerState".
+        // This would not be used for saving instance state, but for saving the
+        // timer state to allow it to survive across app and device restarts.
+        // While it would not be foolproof, it could store the start time
+        // instant of a running timer using the system realtime by taking the
+        // current system realtime and subtracting the elapsed solve time. This
+        // could be written to a *persistent* store each time "onStop()" or
+        // "onPause()" is called. If, on starting the app, there is no instance
+        // state for the TimerFragment, it could load its "hibernated" state
+        // from that persistent store and then reconstruct the timer state by
+        // taking the elapsed realtime and translating it back to an uptime
+        // value. There might be an issue there, though, as the resulting uptime
+        // could be negative and that might cause problems.
+
         if (mTimer != null) {
             outState.putParcelable(
                 KEY_PUZZLE_TIMER_STATE, mTimer.onSaveInstanceState());
@@ -1642,7 +1660,7 @@ public class TimerFragment extends BaseMainFragment
     }
 
     private void showFullScreenTimer(boolean isFullScreen) {
-        if (DEBUG_ME) Log.e(TAG, "showFullScreenTimer(" + isFullScreen + ')');
+        if (DEBUG_ME) Log.d(TAG, "showFullScreenTimer(" + isFullScreen + ')');
 
         // FIXME: Document that hiding a hidden tool bar or showing one that is
         // already showing will no longer cause any problems.

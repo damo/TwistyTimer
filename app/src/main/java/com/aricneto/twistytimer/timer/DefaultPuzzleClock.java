@@ -269,7 +269,15 @@ class DefaultPuzzleClock implements PuzzleClock, Handler.Callback {
 
     @Override
     public long now() {
+        // NOTE: This is not "wall time", it is the "uptime" including real time
+        // elapsed while the system was in deep sleep, which is important. The
+        // value from "SystemClock.uptimeMillis()" does not include sleep time.
         return SystemClock.elapsedRealtime();
+    }
+
+    @Override
+    public long nowRealTime() {
+        return System.currentTimeMillis();
     }
 
     /**

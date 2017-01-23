@@ -13,6 +13,9 @@ import android.util.Log;
 import com.aricneto.twistytimer.items.Penalty;
 import com.aricneto.twistytimer.items.Solve;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -550,7 +553,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     }
 
     @NonNull
-    public Parcelable onSaveInstanceState() {
+    public Parcelable onSaveInstanceState() throws IllegalStateException {
         if (DEBUG_ME) Log.d(TAG, "onSaveInstanceState() @ " + getTimerStage());
         // Does the timer need an "ID" to make its state unique? It would
         // need to be injected in the "TimerConfig" or in another constructor
@@ -724,9 +727,12 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      *
      * @throws IllegalArgumentException
      *     If the given state is not of the expected type.
+     * @throws IllegalStateException
+     *     If the timer is not in its sleeping state.
      */
-    public void onRestoreInstanceState(
-        @Nullable Parcelable state) throws IllegalArgumentException {
+    public void onRestoreInstanceState(@Nullable Parcelable state)
+            throws IllegalArgumentException, IllegalStateException {
+
         if (DEBUG_ME) {
             Log.d(TAG, "onRestoreInstanceState(" + state + ')');
             Log.d(TAG, "  stage before restore=" + getTimerStage());
@@ -836,6 +842,110 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 "Wrong state class. Expected '" + JointTimerState.class
                 + "' but got '" + state.getClass() + "'.");
         } // else do nothing if "state" is null.
+
+        if (DEBUG_ME) Log.d(TAG, "  stage after restore=" + getTimerStage());
+    }
+
+    /**
+     * <p>
+     * Gets a string representation of this puzzle timer's state. The state is
+     * suitable for longer-term persistence of the timer state; longer than the
+     * life of the fragment, activity or application process hosting the timer.
+     * The timer must be in its sleeping state when the state is saved, or an
+     * error will occur. The persistent state should be restored using
+     * {@link #onRestorePersistentState(String)}.
+     * </p>
+     * <p>
+     * The state of any referenced {@code Solve} instance is also persisted.
+     * On restoring the timer's state, the existence of the solve should be
+     * re-verified (if it has an assigned database record ID), to ensure it
+     * still exists in the database.
+     * </p>
+     * <p>
+     * As the device may be rebooted before this persistent state is restored,
+     * and the timer may be in a running state when it is serialised, this form
+     * must accommodate the resetting of the system "uptime", which is the
+     * normal time base used for a running timer. Therefore, the current system
+     * real time clock value ("wall time") is recorded and compared to the
+     * system real time clock value when the state is restored and that
+     * difference is used to correct for the resetting of the system uptime.
+     * The system uptime is not subject to interference from system clock
+     * synchronisation events, but any such changes to the system clock can
+     * affect the accuracy of the timer state when it is restored. However,
+     * the timer will never be allowed to "run backwards". This potential for
+     * inaccuracy mandates that this persistent form only be used for long-term
+     * persistence of the timer state. For short-term persistence of the timer
+     * state, such as when saving the instance state of a fragment or activity,
+     * the {@link #onSaveInstanceState()} should be used.
+     * </p>
+     *
+     * @return
+     *     A string representing the state of this puzzle timer that is
+     *     suitable for long-term persistence.
+     *
+     * @throws IllegalStateException
+     *     If the timer is not currently in its sleeping state.
+     */
+    @NonNull
+    public String onSavePersistentState() throws IllegalStateException {
+        if (DEBUG_ME) Log.d(TAG,
+            "onSavePersistentState() @ " + getTimerStage());
+
+        // Same restriction as for "onSaveInstanceState()".
+        if (isAwake()) {
+            throw new IllegalStateException(
+                "Cannot save persistent state while timer is awake.");
+        }
+
+        return mJointState.toJSON(mClock.now(), mClock.nowRealTime())
+                          .toString();
+    }
+
+    /**
+     * Restores this timer's state from its persistent string form. The state
+     * string must have been created by {@link #onSavePersistentState()} (see
+     * the description of that method for more details). The timer must be in
+     * its sleeping state when the state is restored, or an error will occur.
+     *
+     * @param persistentState
+     *     The string representing the persistent state of this timer. If
+     *     {@code null}, the state of this timer will not be changed.
+     *
+     * @throws IllegalArgumentException
+     *     If there is a problem initialising the puzzle timer state from the
+     *     given persistent state string.
+     * @throws IllegalStateException
+     *     If the timer is not currently in its sleeping state.
+     */
+    public void onRestorePersistentState(@Nullable String persistentState)
+            throws IllegalArgumentException, IllegalStateException {
+        if (DEBUG_ME) {
+            Log.d(TAG, "onRestorePersistentState(" + persistentState + ')');
+            Log.d(TAG, "  stage before restore=" + getTimerStage());
+        }
+
+        if (isAwake()) {
+            throw new IllegalStateException(
+                "Cannot restore persistent state while timer is awake.");
+        }
+
+        if (persistentState != null) {
+            try {
+                final JointTimerState restoredJointState
+                    = JointTimerState.fromJSON(
+                        new JSONObject(persistentState),
+                        mClock.now(), mClock.nowRealTime());
+
+                // Same approach as in "onRestoreInstanceState()": overwrite
+                // the old prototype state, to apply up-to-date preferences.
+                restoredJointState.setPrototypeTimerState(
+                    mJointState.getPrototypeTimerState());
+                mJointState = restoredJointState;
+            } catch (JSONException e) {
+                throw new IllegalArgumentException(
+                    "Invalid persistent state string: cannot parse JSON.", e);
+            }
+        }
 
         if (DEBUG_ME) Log.d(TAG, "  stage after restore=" + getTimerStage());
     }
@@ -1450,7 +1560,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 // a database record ID, "PuzzleTimer.onSolveChanged(Solve)"
                 // must be called (if the timer is still stopped) to ensure
                 // that this timer's referenced "Solve" includes that new ID.
-                mJointState.commit();
+                mJointState.commit(mClock.nowRealTime());
                 transitionTo(STOPPED); // Triggers "onTimerSet()".
                 fireOnSolveStop();
                 break;

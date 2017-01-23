@@ -293,8 +293,10 @@ public class TimerView extends View
         mHeadlinePaint.setAntiAlias(true);
         mHeadlinePaint.setTextAlign(Paint.Align.CENTER);
 
-        // FIXME: Remove this later:
-        setBackgroundColor(Color.DKGRAY);
+        if (DEBUG_ME) {
+            Log.d(TAG, "Timer background highlighted while debugging.");
+            setBackgroundColor(Color.DKGRAY);
+        }
     }
 
     /**
@@ -795,14 +797,18 @@ public class TimerView extends View
      * @return The given {@code buffer}.
      */
     @VisibleForTesting
+    // While "java.lang.Appendable" might be more correct as a return type, it
+    // clutters the code with the need to handle "IOException" from "append()".
     static StringBuilder appendRunningSolveTime(
             @NonNull StringBuilder buffer, long time, boolean showHiRes) {
         // NOTE: As this method be called many times per second when refreshing
-        // a high resolution time value, it is desirable that it be efficient.
+        // a high resolution time value, it is important that it be efficient.
         // Object allocations need to be eliminated, as garbage collection will
         // make the timer appear "jerky" if refreshing a resolution of 0.01 s.
-        // The required formats are quite simple, so ad hoc formatting will do.
-        // A "StringBuilder" eliminates "String" allocations.
+        // Such "jerky" behaviour was observed in an earlier, "quick-n-dirty"
+        // implementation that used "DateTime.toString()". The required time
+        // formats are quite simple, so ad hoc formatting will do. A buffer
+        // eliminates string allocations.
 
         if (time >= 600_000L || !showHiRes) {
             // >= 10 minutes or always low-resolution: present time in whole
@@ -955,14 +961,15 @@ public class TimerView extends View
      *     if the value is negative.
      *
      * @return
-     *     The given {@code buffer}.
+     *     The given {@code buffer} with the numerals appended.
      */
     @VisibleForTesting
     static StringBuilder appendDigitsN(
             @NonNull StringBuilder buffer, int value) {
         // Find the order of magnitude of the value. Start searching from the
         // smaller values, as they are more likely. Stop at 1,000,000,000: a
-        // positive 32-bit "int" cannot hold values greater than that magnitude.
+        // positive 32-bit "int" cannot hold values greater than that order of
+        // magnitude.
         int mag
             = value <            10 ?             1
             : value <           100 ?            10

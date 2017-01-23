@@ -45,6 +45,7 @@ import com.aricneto.twistytimer.utils.FireAndForgetExecutor;
 import com.aricneto.twistytimer.utils.LoggingLoaderCallbacks;
 import com.aricneto.twistytimer.utils.MainState;
 import com.aricneto.twistytimer.utils.Prefs;
+import com.aricneto.twistytimer.utils.TTIntent;
 import com.aricneto.twistytimer.utils.ThemeUtils;
 import com.aricneto.twistytimer.utils.TimerPage;
 import com.github.ksoichiro.android.observablescrollview
@@ -132,6 +133,8 @@ public class TimerMainFragment extends BaseMainFragment
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
             if (DEBUG_ME) Log.d(TAG, "onReceiveWhileAdded(): " + intent);
+
+            TTIntent.validate(intent);
 
             switch (intent.getAction()) {
                 case ACTION_HIDE_TOOLBAR:

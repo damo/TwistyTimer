@@ -9,6 +9,8 @@ import com.aricneto.twistytimer.utils.TimeUtils;
 import com.aricneto.twistytimer.utils.WCAMath;
 
 import org.apache.commons.lang3.StringUtils;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * <p>
@@ -62,6 +64,33 @@ public class Solve implements Parcelable {
     // "_id" column value when a record is inserted. The first automatic
     // value is 1, so any value less than 1 means that the ID is not set.
     public static final int NO_ID = 0;
+
+    /** JSON key name for the solve ID. */
+    private static final String JK_ID = "id";
+
+    /** JSON key name for the exact elapsed solve time. */
+    private static final String JK_TIME = "t";
+
+    /** JSON key name for the puzzle type name. */
+    private static final String JK_PUZZLE_TYPE = "pt";
+
+    /** JSON key name for the solve category. */
+    private static final String JK_SOLVE_CATEGORY = "sc";
+
+    /** JSON key name for the date-time stamp. */
+    private static final String JK_DATE = "d";
+
+    /** JSON key name for the optional scramble sequence. */
+    private static final String JK_SCRAMBLE = "s";
+
+    /** JSON key name for the incurred penalties. */
+    private static final String JK_PENALTIES = "p";
+
+    /** JSON key name for the optional comment. */
+    private static final String JK_COMMENT = "c";
+
+    /** JSON key name for the history flag. */
+    private static final String JK_HISTORY = "h";
 
     /** The database ID of the saved solve. */
     private final long id;
@@ -784,4 +813,80 @@ public class Solve implements Parcelable {
             return new Solve[size];
         }
     };
+
+    /**
+     * Gets a JSON representation of this solve.
+     *
+     * @return A JSON object representing this timer state.
+     */
+    public JSONObject toJSON() {
+        final JSONObject json = new JSONObject();
+
+        try {
+            // Keep the JSON compact by only writing non-default values.
+            // Parsing JSON can be slow, so smaller is better.
+            if (id != NO_ID) {
+                json.put(JK_ID, id);
+            }
+            if (time != 0L) {
+                json.put(JK_TIME, time);
+            }
+
+            // The default puzzle type and solve category are defined outside of
+            // the scope of this class (in "MainState"), so it is safer to write
+            // them to the JSON every time in case the defaults are changed.
+            json.put(JK_PUZZLE_TYPE, puzzleType.typeName());
+            json.put(JK_SOLVE_CATEGORY, category);
+
+            if (date != 0L) {
+                json.put(JK_DATE, date);
+            }
+            if (!scramble.isEmpty()) { // Never null.
+                json.put(JK_SCRAMBLE, scramble);
+            }
+            if (penalties != Penalties.NO_PENALTIES) {
+                json.put(JK_PENALTIES, penalties.encode());
+            }
+            if (!comment.isEmpty()) { // Never null.
+                json.put(JK_COMMENT, comment);
+            }
+            // The solves persisted to JSON are most likely to be assigned
+            // to the current session, so omit it when "false".
+            if (history) {
+                json.put(JK_HISTORY, true);
+            }
+        } catch (JSONException ignore) {
+            // This can only happen if a key name used above is null. Ignore it.
+        }
+
+        return json;
+    }
+
+    /**
+     * Restores a solve from its JSON object form. The JSON object must have
+     * been created by {@link #toJSON()}.
+     *
+     * @param json The JSON object containing the data for a solve.
+     *
+     * @return A new solve initialised from the JSON data.
+     *
+     * @throws JSONException
+     *     If there is a problem initialising the solve from the JSON object.
+     *     For example, if any of the required properties are not defined on
+     *     the object.
+     */
+    public static Solve fromJSON(JSONObject json) throws JSONException {
+        return new Solve(
+            json.optLong(JK_ID, NO_ID),
+            json.optLong(JK_TIME, 0L),
+            PuzzleType.forTypeName(json.getString(JK_PUZZLE_TYPE)),
+            json.getString(JK_SOLVE_CATEGORY),
+            json.optLong(JK_DATE, 0L),
+            json.optString(JK_SCRAMBLE, null),
+            json.has(JK_PENALTIES)
+                ? Penalties.decode(json.getInt(JK_PENALTIES))
+                : Penalties.NO_PENALTIES,
+            json.optString(JK_COMMENT, null),
+            json.optBoolean(JK_COMMENT, false));
+    }
 }

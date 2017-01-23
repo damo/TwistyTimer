@@ -172,24 +172,23 @@ interface PuzzleClock {
      * {@code period}, without affecting the phase synchronisation.
      * </p>
      * <p>
-     * On each "tick", the next tick is scheduled for a future instant in
-     * time (relative to the instant that the current tick is handled) that
-     * must be in phase with the origin time. A best effort is made to
-     * schedule notification of the tick events in phase with the origin time.
-     * However, if there are system delays (or other activity on the main
-     * UI thread) that cause ticks to be notified late, some tick events may
-     * be skipped. For example, if the origin time is 234 ms and the period
-     * is 1,000 ms, then the first tick will be notified immediately and the
-     * second tick at 1,234 ms (instant). However, if the second tick is
-     * delayed until, say, 2,284 ms, then it will be notified at that
-     * instant, but a third tick that would have been scheduled for 2,234 ms
-     * will be skipped, as that time has already passed. The next tick will
-     * then be notified 950 ms later. Therefore, ticks can be skipped, or
-     * notified at intervals greater than or less than the given {@code
-     * period}. However, a best effort is made to ensure that, skipped ticks
-     * aside, the mean interval between ticks is close to the {@code period}
-     * and that the ticks are notified at instances in time that are "in
-     * phase" with the origin time.
+     * On each "tick", the next tick is scheduled for a future instant in time
+     * (relative to the instant that the current tick is handled) that must be
+     * in phase with the origin time. A best effort is made to schedule
+     * notification of the tick events in phase with the origin time. However,
+     * if there are system delays (or other activity on the main UI thread) that
+     * cause ticks to be notified late, some tick events may be skipped. For
+     * example, if the origin time is 234 ms and the period is 1,000 ms, then
+     * the first tick will be notified immediately and the second tick at
+     * 1,234 ms (instant). However, if the second tick is delayed until, say,
+     * 2,284 ms, then it will be notified at that instant, but a third tick that
+     * would have been scheduled for 2,234 ms will be skipped, as that time has
+     * already passed. The next tick will then be notified 950 ms later.
+     * Therefore, ticks can be skipped, or notified at intervals greater than
+     * or less than the given {@code period}. However, a best effort is made to
+     * ensure that, skipped ticks aside, the mean interval between ticks is
+     * close to the {@code period} and that the ticks are notified at instances
+     * in time that are "in phase" with the origin time.
      * </p>
      *
      * @param listener
@@ -203,9 +202,9 @@ interface PuzzleClock {
      *     positive. Note that some implementations may place restrictions on
      *     the maximum value of the period.
      * @param originTime
-     *     The instant in time (originally reported by {@code now()}) that
-     *     provides the phase reference for the scheduling of the periodic
-     *     tick events.
+     *     The instant in time (originally reported by {@code now()}, typically)
+     *     that provides the phase reference for the scheduling of the periodic
+     *     tick events. The value may be negative.
      *
      * @throws IllegalArgumentException
      *     If the period is not positive (greater than zero), or if the
@@ -243,6 +242,7 @@ interface PuzzleClock {
     void cancelAllTicks(@NonNull OnTickListener listener);
 
     /**
+     * <p>
      * Gets the current time value. The timer may request the current time in
      * preference to the current time value notified in the {@code onTick}
      * events, as it may want to avoid inaccuracies caused by delays in the
@@ -250,8 +250,31 @@ interface PuzzleClock {
      * from the clock when it receives events from other sources, such as
      * from the user-interface, that may not include any indication of the
      * current time.
+     * </p>
+     * <p>
+     * Typically, this should <i>not</i> be the system real time clock, as that
+     * may result in inaccurate timing due to intermittent NTP synchronisation
+     * events or other changes to the system clock. The system "uptime" is more
+     * appropriate, as it is not subject to such unpredictable changes. Where
+     * possible, the source should include the time elapsed while the device is
+     * in sleep mode, e.g., use {@code android.os.SystemClock.elapsedRealtime()}
+     * rather than {@code android.os.SystemClock.uptimeMillis()}, as the latter
+     * does not include time elapsed while the system was in deep sleep.
+     * </p>
      *
      * @return The monotonically increasing current time value in milliseconds.
      */
     long now();
+
+    /**
+     * Gets the current real time ("wall time") value. This is required for
+     * some operations, such as adding a date-time stamp to completed solve
+     * attempts and managing long-term persistence of data that may span a
+     * reboot of the device and the resetting of the system "uptime" that is
+     * provided by {@link #now()}. {@code System.currentTimeMillis()} is an
+     * appropriate source for this value.
+     *
+     * @return The current real time value in milliseconds since the Unix epoch.
+     */
+    long nowRealTime();
 }
