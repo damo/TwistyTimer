@@ -7,8 +7,8 @@ package com.aricneto.twistytimer.timer;
  *
  * @author damo
  */
-// NOTE: Not part of the public API of "PuzzleTimer" or "TimerState", so
-// package access only.
+// NOTE: This enum is not part of the public API of "PuzzleTimer" or
+// "TimerState", so it has default (package) access only.
 enum TimerStage {
     // TERMINOLOGY NOTE: These are the "states" of a "state machine", but
     // they are dubbed "stages". The current "TimerStage" is just one element
@@ -17,16 +17,6 @@ enum TimerStage {
     // the name "State", while perfectly appropriate in the context of an
     // abstract FSM, would only cause confusion in the context of the wider
     // "TimerState".
-
-    // NOTE: There is no "hold-to-start" (delay) behaviour when beginning
-    // inspection, only when beginning the timing of the solve attempt. This
-    // relates to the use, in competition, of a stopwatch in the judge's
-    // hands used for the inspection period and the StackMat timer with its
-    // 0.55 s start delay under the competitor's hands.
-
-    // TODO: Need to be able to "PAUSE"? It would probably need to be an
-    // optional feature, as it would subvert the ability to tap anywhere on
-    // the screen to stop the timer.
 
     /**
      *
@@ -276,6 +266,9 @@ enum TimerStage {
      * </p>
      */
     SOLVE_STARTED,
+
+    // FIXME: Document this....
+    SOLVE_PAUSED,
 
     /**
      * <p>

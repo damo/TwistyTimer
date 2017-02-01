@@ -105,13 +105,14 @@ import static com.aricneto.twistytimer.timer.TimerStage.*;
  * </p>
  * {@code sleep()} should
  * be called from the {@code onStop()} (FIXME: untrue?) life-cycle method of a
- * {@code Fragment} or {@code Activity}. Calling this method from {@code
- * onPause()} may not be appropriate in some cases, as the timer may still be
- * visible and may still need to be updated, but that decision is left to the
- * caller. Placing the timer into its sleeping state ensures that the events do
- * not occur while the fragment or activity is inactive. However, placing the
- * timer into its sleeping state involves notifying {@link #onTouchCancelled()},
- * which can lead to other FIXME: complete this.... </p> FIXME: Instantiation,
+ * {@code Fragment} or {@code Activity}. Calling this method from
+ * {@code onPause()} may not be appropriate in some cases, as the timer may
+ * still be visible and may still need to be updated, but that decision is left
+ * to the caller. Placing the timer into its sleeping state ensures that the
+ * events do not occur while the fragment or activity is inactive. However,
+ * placing the timer into its sleeping state involves notifying
+ * {@link #onTouchCancelled()}, which can lead to other....
+ * FIXME: complete this.... </p> FIXME: Instantiation,
  * injection of configuration values, restoring state, wake/sleep, etc... FIXME:
  * How all this is best integrated into a Fragment/Activity. FIXME: Life-cycle
  * of the solve. Restoring state and verifying that solve still exists, etc.
@@ -292,7 +293,16 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
         ));
 
         put(SOLVE_STARTED, EnumSet.of(
+            SOLVE_PAUSED,
             // Stops the solve timer.
+            STOPPING,
+            CANCELLING
+        ));
+
+        put(SOLVE_PAUSED, EnumSet.of(
+            // Resumes the solve timer after being paused.
+            SOLVE_STARTED,
+            // Stops the solve timer from the paused state.
             STOPPING,
             CANCELLING
         ));
@@ -368,25 +378,34 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     @interface TickID { }
 
     /** Message "what" to make {@link #cancel()} asynchronous. */
-    private static final int MSG_WHAT_CANCEL = 100;
+    private static final int MSG_WHAT_CANCEL = 1;
 
     /** Message "what" to make {@link #reset()} asynchronous. */
-    private static final int MSG_WHAT_RESET = 110;
+    private static final int MSG_WHAT_RESET = 2;
 
     /** Message "what" to make {@link #wake()} asynchronous. */
-    private static final int MSG_WHAT_WAKE = 120;
+    private static final int MSG_WHAT_WAKE = 3;
 
     /** Message "what" to make {@link #onTouchUp()} asynchronous. */
-    private static final int MSG_WHAT_TOUCH_UP = 130;
+    private static final int MSG_WHAT_TOUCH_UP = 4;
 
     /** Message "what" to make {@link #onTouchDown()} asynchronous. */
-    private static final int MSG_WHAT_TOUCH_DOWN = 140;
+    private static final int MSG_WHAT_TOUCH_DOWN = 5;
 
     /** Message "what" to make {@link #onTouchCancelled()} asynchronous. */
-    private static final int MSG_WHAT_TOUCH_CANCELLED = 150;
+    private static final int MSG_WHAT_TOUCH_CANCELLED = 6;
 
-    /** Message "what" to make {@link #onSolveChanged} asynchronous. */
-    private static final int MSG_WHAT_SOLVE_CHANGED = 160;
+    /** Message "what" to make {@link #onSolveChanged(Solve)} asynchronous. */
+    private static final int MSG_WHAT_SOLVE_CHANGED = 7;
+
+    /** Message "what" to make {@link #stop()} asynchronous. */
+    private static final int MSG_WHAT_STOP = 8;
+
+    /** Message "what" to make {@link #pause()} asynchronous. */
+    private static final int MSG_WHAT_PAUSE = 9;
+
+    /** Message "what" to make {@link #resume()} asynchronous. */
+    private static final int MSG_WHAT_RESUME = 10;
 
     // Define "@AsyncCommand" primarily to ensure that the values of the
     // constants are all unique. There are a few other small benefits for code
@@ -394,8 +413,9 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
         MSG_WHAT_CANCEL, MSG_WHAT_RESET, MSG_WHAT_WAKE,
+        MSG_WHAT_STOP, MSG_WHAT_PAUSE, MSG_WHAT_RESUME,
         MSG_WHAT_TOUCH_UP, MSG_WHAT_TOUCH_DOWN, MSG_WHAT_TOUCH_CANCELLED,
-        MSG_WHAT_SOLVE_CHANGED
+        MSG_WHAT_SOLVE_CHANGED,
     })
     @interface AsyncCommand { }
 
@@ -432,6 +452,15 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                     break;
                 case MSG_WHAT_WAKE:
                     timer.wakeSync();
+                    break;
+                case MSG_WHAT_STOP:
+                    timer.stopSync();
+                    break;
+                case MSG_WHAT_PAUSE:
+                    timer.pauseSync();
+                    break;
+                case MSG_WHAT_RESUME:
+                    timer.resumeSync();
                     break;
                 case MSG_WHAT_TOUCH_DOWN:
                     timer.onTouchDownSync();
@@ -698,15 +727,15 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * </p>
      * <p>
      * The configuration settings for the duration of the inspection period
-     * (if any) and the hold-to-start behaviour are saved by {@code
-     * onSaveInstanceState()}. After restoration of the state, the original
-     * configuration values remain in effect for any solve attempt that was
-     * still running when the state was saved. However, for any <i>new</i>
-     * solve attempts, the configuration values set in the constructor on
-     * this instance of the timer before {@code onRestoreInstanceState
-     * (Parcelable)} is called take effect. The values can be changed again
-     * after restoration (or after instantiation) by
-     * {@link #setInspectionDuration(long)} and
+     * (if any) and the hold-to-start behaviour are saved by
+     * {@code onSaveInstanceState()}. After restoration of the state, the
+     * original configuration values remain in effect for any solve attempt
+     * that was still running when the state was saved. However, for any
+     * <i>new</i> solve attempts, the configuration values set in the
+     * constructor on this instance of the timer before
+     * {@code onRestoreInstanceState(Parcelable)} is called take effect. The
+     * values can be changed again after restoration (or after instantiation)
+     * by {@link #setInspectionDuration(long)} and
      * {@link #setHoldToStartEnabled(boolean)}.
      * </p>
      * <p>
@@ -719,7 +748,8 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * call has also returned). However, if the timer is in the sleeping state
      * when it is restored, no notification will be sent. Instead, the
      * notification will be sent after the next explicit call to {@code wake()}
-     * has returned. </p>
+     * has returned.
+     * </p>
      *
      * @param state
      *     The instance state to be restored. If {@code null}, no changes will
@@ -951,14 +981,18 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     }
 
     /**
-     * <p> Sets the new duration for the inspection period. If the duration is
+     * <p>
+     * Sets the new duration for the inspection period. If the duration is
      * greater than zero, an inspection countdown will occur before the solve
-     * timer can be started. </p> <p> This duration is first set in the
-     * constructor. However, if the preference for this duration is changed
-     * during the life of this timer instance, it can be changed via this
-     * method. However, changes only apply to new solve attempts; if the timer
-     * is already running for a solve attempt, this change will not take effect
-     * during that attempt. </p>
+     * timer can be started.
+     * </p>
+     * <p>
+     * This duration is first set in the constructor. However, if the preference
+     * for this duration is changed during the life of this timer instance, it
+     * can be changed via this method. However, changes only apply to new solve
+     * attempts; if the timer is already running for a solve attempt, this
+     * change will not take effect during that attempt.
+     * </p>
      *
      * @param duration
      *     The duration of the normal inspection period (in milliseconds). This
@@ -974,14 +1008,18 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     }
 
     /**
-     * <p> Enables or disables the "hold-to-start" behaviour. If enabled, the
-     * touch down on the timer must be held for a short period before lifting
-     * the touch will start the timer. </p> <p> This flag is first set in the
-     * constructor. However, if the preference for this behaviour is changed
-     * during the life of this timer instance, it can be changed via this
-     * method. However, changes only apply to new solve attempts; if the timer
-     * is already running for a solve attempt, this change will not take effect
-     * during that attempt. </p>
+     * <p>
+     * Enables or disables the "hold-to-start" behaviour. If enabled, the touch
+     * down on the timer must be held for a short period before lifting the
+     * touch will start the timer.
+     * </p>
+     * <p>
+     * This flag is first set in the constructor. However, if the preference
+     * for this behaviour is changed during the life of this timer instance, it
+     * can be changed via this method. However, changes only apply to new solve
+     * attempts; if the timer is already running for a solve attempt, this
+     * change will not take effect during that attempt.
+     * </p>
      *
      * @param isEnabled
      *     {@code true} if, before starting the inspection countdown or solve
@@ -1001,9 +1039,10 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     /**
      * Adds a listener for user-interface cues and timer "set" notifications.
      * The listeners will be notified in the order in which they were added.
-     * Notifications will <i>not</i> be sent while the timer is in its {@link
-     * #sleep()} state, it must first be awoken by {@link #wake()}. Use {@link
-     * #removeOnTimerEventListener(OnTimerEventListener)} to remove a listener.
+     * Notifications will <i>not</i> be sent while the timer is in its
+     * {@link #sleep()} state, it must first be awoken by {@link #wake()}.
+     * Use {@link #removeOnTimerEventListener(OnTimerEventListener)} to remove
+     * a listener.
      *
      * @param listener
      *     The new listener to be notified. If the listener is already added, it
@@ -1057,13 +1096,13 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     }
 
     /**
-     * Sets the clock that will be used to schedule the "tick" events that drive
-     * much of the operation of the puzzle timer. By default, the clock
-     * implementation is based on the Android system uptime reported by {@code
-     * android.os.SystemClock .elapsedRealtime()}. This default is suitable for
-     * production use. However, for the purposes of testing the puzzle timer
-     * (and <i>only</i> for that purpose), the clock implementation may be
-     * overridden.
+     * Sets the clock that will be used to schedule the "tick" events that
+     * drive much of the operation of the puzzle timer. By default, the clock
+     * implementation is based on the Android system uptime reported by
+     * {@code android.os.SystemClock.elapsedRealtime()}. This default is
+     * suitable for production use. However, for the purposes of testing the
+     * puzzle timer (and <i>only</i> for that purpose), the clock implementation
+     * may be overridden.
      *
      * @param clock
      *     The clock instance to use instead of the default type of clock.
@@ -1466,7 +1505,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 // "INSPECTION_SOLVE_HOLDING_FOR_START". It will fire on each
                 // return from that stage to this one when the "hold" is not
                 // long enough to start the solve timer.
-                fireOnTimerCue(CUE_INSPECTION_RESUMED);
+                fireOnTimerCue(CUE_INSPECTION_REASSERTED);
                 // Allow this cue to be fired each time there is a transition
                 // from this stage to "INSPECTION_SOLVE_HOLDING_FOR_START".
                 state.reloadTimerCue(CUE_INSPECTION_SOLVE_HOLDING_FOR_START);
@@ -1478,10 +1517,10 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
             case INSPECTION_SOLVE_HOLDING_FOR_START:
                 // *Inspection* is still running; *solve* is holding.
                 fireOnTimerCue(CUE_INSPECTION_SOLVE_HOLDING_FOR_START);
-                // Allow "CUE_INSPECTION_RESUMED" to fire each time there is a
-                // transition from this stage back to "INSPECTION_STARTED" when
-                // the "hold" is too short to reach the ready-to-start stage.
-                state.reloadTimerCue(CUE_INSPECTION_RESUMED);
+                // Allow "CUE_INSPECTION_REASSERTED" to fire on each transition
+                // from this stage back to "INSPECTION_STARTED" when the "hold"
+                // is too short to reach the ready-to-start stage.
+                state.reloadTimerCue(CUE_INSPECTION_REASSERTED);
 
                 scheduleHoldingForStartAlarm();
                 scheduleInspectionAlarms(state);
@@ -1531,9 +1570,40 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
 
             case SOLVE_STARTED:
                 fireOnTimerSet();
+                // "CUE_SOLVE_STARTED" only fires once. It will not re-fire on
+                // a transition from "SOLVE_PAUSED" back to "SOLVE_STARTED".
                 fireOnTimerCue(CUE_SOLVE_STARTED);
 
+                // "SOLVE_PAUSED" will reload "CUE_SOLVE_RESUMED". It is not
+                // loaded by default, so this will only fire if returning to
+                // "SOLVE_STARTED" from "SOLVE_PAUSED". It is not fired if the
+                // timer is stopped or cancelled from the paused state.
+                fireOnTimerCue(CUE_SOLVE_RESUMED);
+
+                // "CUE_SOLVE_PAUSED" is fired each time there is a transition
+                // from "SOLVE_STARTED" to "SOLVE_PAUSED". It is not loaded by
+                // default. Load it here, so the next pause can fire this cue.
+                // If the timer is restored to the "SOLVE_PAUSED" stage, this
+                // cue will not (and should not) re-fire, so it is correct to
+                // reload it for "SOLVE_STARTED", not "SOLVE_PAUSED".
+                state.reloadTimerCue(CUE_SOLVE_PAUSED);
+
                 scheduleTimerRefresh();
+                break;
+
+            case SOLVE_PAUSED:
+                fireOnTimerSet();
+                // "CUE_SOLVE_PAUSED" is reloaded by "SOLVE_STARTED" on resuming
+                // from a pause. It can them be re-fired if paused again.
+                fireOnTimerCue(CUE_SOLVE_PAUSED);
+
+                // Allow "CUE_SOLVE_RESUMED" to fire each time there is a
+                // transition from this stage back to "SOLVE_STARTED" when the
+                // timer is resumed. It will not fire if the transition goes
+                // from "SOLVE_PAUSED" straight to "STOPPING"/"CANCELLING", etc.
+                state.reloadTimerCue(CUE_SOLVE_RESUMED);
+
+                // No refresh ticks are scheduled when paused.
                 break;
 
             case CANCELLING:
@@ -1669,6 +1739,45 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
     }
 
     /**
+     * Enqueues a command that will be executed asynchronously. If the command
+     * is not a touch up/down/cancel command and the command is already on the
+     * queue, it will not be enqueued again. Touch commands can be enqueued,
+     * even if the same command is already enqueued, as this ensures that no
+     * touch events are ignored in the event that they are enqueued at a faster
+     * rate than they can be handled.
+     *
+     * @param commandWhat The command (message "what") to enqueue.
+     */
+    private void enqueueCommand(@AsyncCommand int commandWhat) {
+        switch (commandWhat) {
+            case MSG_WHAT_CANCEL:
+            case MSG_WHAT_PAUSE:
+            case MSG_WHAT_RESET:
+            case MSG_WHAT_RESUME:
+            case MSG_WHAT_SOLVE_CHANGED:
+            case MSG_WHAT_STOP:
+            case MSG_WHAT_WAKE:
+                if (!mCommandHandler.hasMessages(commandWhat)) {
+                    mCommandHandler.sendMessage(
+                        mCommandHandler.obtainMessage(commandWhat, this));
+                } else if (DEBUG_ME) {
+                    // If one of these commands is already on the queue, it
+                    // might indicate a bug in the integration of the puzzle
+                    // timer into the fragment/activity life-cycle, so warn.
+                    Log.w(TAG, "Command already on the queue: " + commandWhat);
+                }
+                break;
+
+            case MSG_WHAT_TOUCH_CANCELLED:
+            case MSG_WHAT_TOUCH_DOWN:
+            case MSG_WHAT_TOUCH_UP:
+                mCommandHandler.sendMessage(
+                    mCommandHandler.obtainMessage(commandWhat, this));
+                break;
+        }
+    }
+
+    /**
      * <p>
      * Notifies the timer that the timer's user interface has detected a touch
      * down. If the timer is not awake (see {@link #isAwake()}), this event
@@ -1726,8 +1835,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
             getTimerState().stopSolve(mClock.now());
         }
 
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_TOUCH_DOWN, this));
+        enqueueCommand(MSG_WHAT_TOUCH_DOWN);
     }
 
     /**
@@ -1776,6 +1884,11 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 transitionTo(STOPPING);
                 break;
 
+            case SOLVE_PAUSED:
+                // Touching down and then *up* resumes a paused timer (or it
+                // is resumed by "resume()"), so wait for "onTouchUp()".
+                break;
+
             case INSPECTION_HOLDING_FOR_START:
             case INSPECTION_READY_TO_START:
             case INSPECTION_SOLVE_HOLDING_FOR_START:
@@ -1811,8 +1924,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * </p>
      */
     public void onTouchUp() {
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_TOUCH_UP, this));
+        enqueueCommand(MSG_WHAT_TOUCH_UP);
     }
 
     /**
@@ -1872,6 +1984,12 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 transitionTo(SOLVE_STARTED);
                 break;
 
+            case SOLVE_PAUSED:
+                // Timer was paused, so a new touch up will resume it again.
+                state.resumeSolve(now);
+                transitionTo(SOLVE_STARTED);
+                break;
+
             case STARTING:
             case CANCELLING:
             case STOPPING:
@@ -1900,8 +2018,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * </p>
      */
     public void onTouchCancelled() {
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_TOUCH_CANCELLED, this));
+        enqueueCommand(MSG_WHAT_TOUCH_CANCELLED);
     }
 
     /**
@@ -1940,6 +2057,9 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
                 // and *keep* it stopped. (It is also expected that the UI
                 // will disable the swipe-to-change-tabs behaviour while the
                 // timer is running, so "onTouchCancelled" is unlikely.)
+            case SOLVE_PAUSED:
+                // Only "onTouchUp()" affects this stage, and only a touch down
+                // can be cancelled.
                 break;
 
             case INSPECTION_HOLDING_FOR_START:
@@ -2141,8 +2261,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
         if (DEBUG_ME) Log.d(TAG, "  Updating timer Solve to: " + newSolve);
         state.setSolve(newSolve);
 
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_SOLVE_CHANGED, this));
+        enqueueCommand(MSG_WHAT_SOLVE_CHANGED);
     }
 
     /**
@@ -2175,8 +2294,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      * </p>
      */
     public void reset() {
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_RESET, this));
+        enqueueCommand(MSG_WHAT_RESET);
     }
 
     /**
@@ -2232,8 +2350,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      *     that it will be the same.
      */
     public boolean cancel() {
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_CANCEL, this));
+        enqueueCommand(MSG_WHAT_CANCEL);
 
         // This is mostly for the owning fragment's handling of "Back" button
         // presses: if "cancel()" had any effect, the "Back" event should be
@@ -2257,6 +2374,10 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
             // there is no need to stop any running timers, etc. Any "ticks"
             // are cancelled during the transition "tearDown" and any solve
             // reference is reset to null.
+            //
+            // NOTE: See "stopSync()" for comments about how "STARTING" (which
+            // does not allow a transition to "CANCELLING") cannot be an active
+            // stage at this instant.
             transitionTo(CANCELLING);
         }
     }
@@ -2344,8 +2465,8 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
             // otherwise it will do nothing. This call is the trigger for the
             // synchronous call-backs. Calling it limits the number of stages
             // at which the timer can be in "onSaveInstanceState()" or "wake()"
-            // to just "UNUSED", "INSPECTION_STARTED", "SOLVE_STARTED" and
-            // "STOPPED".
+            // to just "UNUSED", "INSPECTION_STARTED", "SOLVE_STARTED"
+            // "SOLVE_PAUSED" and "STOPPED".
             onTouchCancelledSync();
 
             // Clear "mIsAwake" first to prevent unexpected call-backs during
@@ -2400,8 +2521,7 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
 
         // NOTE: Check "isAwake()" in "wakeSync()", in case the state changes
         // while queued.
-        mCommandHandler.sendMessage(
-            mCommandHandler.obtainMessage(MSG_WHAT_WAKE, this));
+        enqueueCommand(MSG_WHAT_WAKE);
     }
 
     /**
@@ -2416,10 +2536,10 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
             mIsAwake = true;
 
             // In the sleeping state, the stage can only be one of "UNUSED",
-            // "INSPECTION_STARTED", "SOLVE_STARTED", or "STOPPED". "setUp()"
-            // will fire "onTimerSet()" for any of those stages. As elsewhere,
-            // "transitionTo()" is not called, as the current stage is not
-            // going to change; it just needs to be set up.
+            // "INSPECTION_STARTED", "SOLVE_STARTED", "SOLVE_PAUSED", or
+            // "STOPPED". "setUp()" will fire "onTimerSet()" for any of those
+            // stages. As elsewhere, "transitionTo()" is not called, as the
+            // current stage is not going to change; it just needs to be set up.
             setUp(getTimerStage());
         }
     }
@@ -2439,5 +2559,183 @@ public class PuzzleTimer implements PuzzleClock.OnTickListener {
      */
     private boolean isAwake() {
         return mIsAwake;
+    }
+
+    /**
+     * <p>
+     * Pauses the timer. Only the solve timer can be paused. This has no effect
+     * if the inspection countdown timer is running or if the solve timer is
+     * already paused. The timer must be awake to be paused.
+     * </p>
+     * <p>
+     * When the solve timer is running, a touch down event will stop the timer.
+     * Therefore, the user interface must include a separate means of detecting
+     * the user's intention to pause the timer and then direct that intention
+     * to this method.
+     * </p>
+     * <p>
+     * This method returns immediately. A command event is sent to the message
+     * queue and will be handled in turn. When handled, and if the timer is in
+     * a state that can be paused and an event listener is registered,
+     * {@code onTimerSet(TimerState)} is called back and this is followed by
+     * notification of {@code onTimerCue(TimerCue.CUE_SOLVE_PAUSED)}. Refresh
+     * events are suspended while the timer is paused.
+     * </p>
+     */
+    // NOTE: Because a pause operation is (likely) triggered by a user touching
+    // the screen, a quick double tap might result in "pause()" being called a
+    // second time before the first call is handled. While this is unlikely, it
+    // is no harm to take a lenient approach: ignore any new pause operation if
+    // a pause command message is already queued. This simplifies the handling
+    // in the UI code. (The check for duplicates is in "enqueueCommand()".)
+    //
+    // Unlike when a timer is stopped (see "onTouchDown()"), the pause operation
+    // is not considered to be as critical to the accuracy of the timing, so it
+    // is performed from "resumeSync()" (or from "onTouchUp()") instead of here
+    // before the command message is queued.
+    //
+    // NOTE: If it were necessary to support pausing of the inspection timer,
+    // this same method could be used and "pauseSync()" could check which timer
+    // is running before transitioning to "INSPECTION_PAUSED" or "SOLVE_PAUSED".
+    public void pause() {
+        // Let "pauseSync()" decide if a pause can be performed when it is
+        // called later.
+        enqueueCommand(MSG_WHAT_PAUSE);
+    }
+
+    /**
+     * Handles the command event notifying that the timer should be paused. The
+     * command event is queued by {@link #pause()}.
+     */
+    // NOTE: A pause command may be queued when the timer is not already paused,
+    // but the command is handled some time later. It might be possible for the
+    // state to change in the meantime (e.g., for the timer to be stopped).
+    // Therefore, be lenient about the state of the timer and just ignore the
+    // pause request if the timer state is such that it cannot be paused. This
+    // is preferable to having to handle an error condition from an asynchronous
+    // method invocation.
+    //
+    private void pauseSync() {
+        if (isAwake() && getTimerStage() == SOLVE_STARTED) {
+            // Pause from here. If this were done in "setUp(SOLVE_PAUSED)", it
+            // would need to be guarded for the case where the timer state is
+            // persisted at the "SOLVE_PAUSED" stage and then restored into that
+            // stage. In that case, the restored timer state would already be
+            // paused and could not be paused again without an error.
+            getTimerState().pauseSolve(mClock.now());
+            transitionTo(SOLVE_PAUSED);
+        }
+    }
+
+    /**
+     * <p>
+     * Resumes the solve timer if it is paused. Only the solve timer can be
+     * paused and resumed. This has no effect if the inspection countdown timer
+     * is running or if the solve timer is not already paused. The timer must
+     * be awake to be resumed from its paused state.
+     * </p>
+     * <p>
+     * When paused, a touch down event will resume the timer. However, as a
+     * separate user interface input is required to initiate a pause (see
+     * {@link #pause()} for details), it may be preferable to complement this
+     * with a separate input to resume from the paused state. It is also
+     * possible to stop the timer from the paused state, so a separate input
+     * would be needed to support that action (see {@link #stop()}).
+     * </p>
+     * <p>
+     * This method returns immediately. A command event is sent to the message
+     * queue and will be handled in turn. When handled, and if the timer is in
+     * a state that can be paused and an event listener is registered,
+     * {@code onTimerSet(TimerState)} is called back and this is followed by
+     * notification of {@code onTimerCue(TimerCue.CUE_SOLVE_RESUMED)}. Refresh
+     * events recommence when the timer is resumed.
+     * </p>
+     */
+    public void resume() {
+        enqueueCommand(MSG_WHAT_RESUME);
+    }
+
+    /**
+     * Handles the command event notifying that the timer should be resumed from
+     * its paused state. The command event is queued by {@link #resume()}.
+     */
+    private void resumeSync() {
+        // NOTE: See comments on "pause()" and "pauseSync()" for more details.
+        if (isAwake() && getTimerStage() == SOLVE_PAUSED) {
+            getTimerState().resumeSolve(mClock.now());
+            transitionTo(SOLVE_STARTED);
+        }
+    }
+
+    /**
+     * <p>
+     * Stops the timer. If the solve timer has not yet been started (e.g., if
+     * the inspection timer is running), this method has the same effect as a
+     * call to {@link #cancel()}. If the solve timer is running, this method has
+     * the same effect as a call to {@link #onTouchDown()}: the timer stops. If
+     * the solve timer is paused, {@link #onTouchUp()} will resume the running
+     * of the timer (see {@link #resume()}), so the main use of {@code stop()}
+     * is to allow the timer to be stopped when it is in a paused state, as no
+     * other touch events can stop the timer when paused. If the timer has never
+     * been started or has already stopped, no action is taken. The timer must
+     * be awake before it can be stopped.
+     * </p>
+     * <p>
+     * This method returns immediately. A command event is sent to the message
+     * queue and will be handled in turn.
+     * </p>
+     */
+    public void stop() {
+        enqueueCommand(MSG_WHAT_STOP);
+    }
+
+    /**
+     * Handles the command event notifying that the timer should be stopped.
+     * The command event is queued by {@link #stop()}.
+     */
+    private void stopSync() {
+        // NOTE: See comments on "pause()" and "pauseSync()" for more details.
+        if (isAwake()) {
+            switch (getTimerStage()) {
+                case UNUSED:
+                case STOPPING:
+                case CANCELLING:
+                case STOPPED:
+                    // The timer is not running or is already about to stop, so
+                    // there is nothing to do.
+                case STARTING:
+                    // "STARTING" is a transitional stage that cannot be active
+                    // when "stopSync()" is called. While a timer cue may be
+                    // fired at this stage and "stop()" could be called from the
+                    // code handling that cue, the call is asynchronous, so the
+                    // stage will be transitioned to another before "stopSync()"
+                    // is notified. Do nothing (most transitions would be
+                    // invalid, anyway).
+                    break;
+
+                case INSPECTION_HOLDING_FOR_START:
+                case INSPECTION_READY_TO_START:
+                case INSPECTION_STARTED:
+                case INSPECTION_SOLVE_HOLDING_FOR_START:
+                case INSPECTION_SOLVE_READY_TO_START:
+                case SOLVE_HOLDING_FOR_START:
+                case SOLVE_READY_TO_START:
+                    // The solve timer has not started, so no result can be
+                    // recorded if the solve attempt is stopped now, so cancel
+                    // the attempt (and roll back to the previous result).
+                    transitionTo(CANCELLING);
+                    break;
+
+                case SOLVE_STARTED:
+                case SOLVE_PAUSED:
+                    // The solve timer has started (and may have been paused).
+                    // Stop the timer as normal. This is the same action taken
+                    // in "onTouchDown()" for "SOLVE_STARTED", though not for
+                    // "SOLVE_PAUSED". In the latter case, "onTouchUp()"
+                    // transitions to "SOLVE_RESUMED", which is not wanted here.
+                    transitionTo(STOPPING);
+                    break;
+            }
+        }
     }
 }

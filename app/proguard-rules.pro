@@ -33,6 +33,9 @@
 
 -keep class io.codetail.animation.arcanimator.** { *; }
 
+# Required for some Apache Commons libraries to avoid warning.
+-keepattributes EnclosingMethod
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:

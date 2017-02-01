@@ -157,11 +157,11 @@ public final class ExImUtils {
     }
 
     /**
-     * Gets the file to create when exporting all solve times in the back-up
-     * format. The file name will include a time-stamp. See {@link
-     * #getExternalFileForExport(PuzzleType, String)} for a caution about
-     * time-stamp. Call {@link #ensureBackupExportDir()} before attempting to
-     * create this file.
+     * Gets the file to create when exporting all solve times in the
+     * back-up format. The file name will include a time-stamp. See
+     * {@link #getExternalFileForExport(PuzzleType, String)} for a caution
+     * about time-stamp. Call {@link #ensureBackupExportDir()} before
+     * attempting to create this file.
      *
      * @return The file (with fill path) to use when exporting the solve times.
      */
@@ -210,9 +210,10 @@ public final class ExImUtils {
      * @param name
      *     The file name, or component of a file name, to be sanitized.
      *
-     * @return A sanitized string with problematic characters converted to
-     * underscores; or an empty string if {@code name} is empty or {@code
-     * null}.
+     * @return
+     *     A sanitized string with problematic characters converted to
+     *     underscores; or an empty string if {@code name} is empty or
+     *     {@code null}.
      */
     private static CharSequence sanitizeFileName(@Nullable CharSequence name) {
         final StringBuilder s = new StringBuilder(name != null ? name : "");

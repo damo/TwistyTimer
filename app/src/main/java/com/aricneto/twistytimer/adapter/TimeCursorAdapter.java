@@ -18,7 +18,10 @@ import com.aricneto.twistytimer.TwistyTimer;
 import com.aricneto.twistytimer.database.DatabaseHandler;
 import com.aricneto.twistytimer.fragment.TimerListFragment;
 import com.aricneto.twistytimer.fragment.dialog.EditSolveDialog;
+import com.aricneto.twistytimer.items.Penalties;
+import com.aricneto.twistytimer.items.Penalty;
 import com.aricneto.twistytimer.items.Solve;
+import com.aricneto.twistytimer.layout.StrikeoutTextView;
 import com.aricneto.twistytimer.listener.DialogListener;
 import com.aricneto.twistytimer.utils.ThemeUtils;
 import com.aricneto.twistytimer.utils.TimeUtils;
@@ -166,9 +169,9 @@ public class TimeCursorAdapter
             }
         });
 
-        // IMPORTANT: "holder" may be recycled, so be sure to bind the sub-views
-        // completely to override all fields of the solve that may previously
-        // have used the same holder.
+        // IMPORTANT: "holder" may be recycled, so be sure to bind values to
+        // *all* of the sub-views to override all values from any other solve
+        // that may previously have used the same holder.
         holder.dateText.setText(
             new DateTime(solve.getDate()).toString("dd'/'MM"));
         // "time" is formatted "pretty" with smaller text for field with
@@ -176,28 +179,42 @@ public class TimeCursorAdapter
         // done in "Solve.getTime()").
         holder.timeText.setText(
             TimeUtils.prettyFormatResultTime(solve.getTime()));
-        // Clear the strike-through flags.
-        holder.timeText.setPaintFlags(
-            holder.timeText.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
-/* FIXME!!!
-        switch (solve.getPenalty()) {
-            default:
-            case NONE:
-                holder.penaltyText.setVisibility(View.GONE);
-                break;
+        // Clear the strike-out (checked) state.
+        holder.timeText.setChecked(false);
 
-            case DNF:
-                // For a DNF, strike out the time value. This allows the user to see what the
-                // elapsed time was for the DNF, which may help to find "rogue" times.
-                holder.timeText.setPaintFlags(
-                        holder.timeText.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG); // Set.
-                // fall through
-            case PLUS_TWO:
-                holder.penaltyText.setText(solve.getPenalty().getDescriptionResID());
-                holder.penaltyText.setVisibility(View.VISIBLE);
-                break;
+        // If there are penalties, format them compactly to fit the small amount
+        // of space available. Merge the pre- and post-start penalty counts and
+        // show the total penalty time as a single value (e.g., "DNF+8s").
+        final Penalties penalties = solve.getPenalties();
+
+        if (penalties.hasPenalties()) {
+            final StringBuilder s = new StringBuilder();
+
+            if (penalties.hasDNF()) {
+                s.append(Penalty.DNF.getDescription());
+
+                // For a DNF, strike out the *time* value. This allows the user
+                // to see what the elapsed time was for the DNF, which may help
+                // to find "rogue" times. For example, if a total time played is
+                // shown in the stats and DNF solve attempts are included, then
+                // a stray DNF result of, say, "27:34:12.18" could be found and
+                // deleted to avoid it skewing the total time.
+                holder.timeText.setChecked(true);
+            }
+
+            final int timePenalties
+                = (int) penalties.getTimePenalty() / 1_000; // Convert ms to s.
+
+            if (timePenalties > 0) {
+                s.append('+').append(timePenalties).append('s');
+            }
+
+            holder.penaltyText.setText(s);
+            holder.penaltyText.setVisibility(View.VISIBLE);
+        } else {
+            holder.penaltyText.setVisibility(View.GONE);
         }
-*/
+
         if (solve.hasComment()) {
             holder.commentIcon.setVisibility(View.VISIBLE);
         } else {
@@ -215,12 +232,12 @@ public class TimeCursorAdapter
     }
 
     static class TimeHolder extends RecyclerView.ViewHolder {
-        @BindView(R.id.card)        CardView       card;
-        @BindView(R.id.root)        RelativeLayout root;
-        @BindView(R.id.timeText)    TextView       timeText;
-        @BindView(R.id.penaltyText) TextView       penaltyText;
-        @BindView(R.id.date)        TextView       dateText;
-        @BindView(R.id.commentIcon) ImageView      commentIcon;
+        @BindView(R.id.card)        CardView          card;
+        @BindView(R.id.root)        RelativeLayout    root;
+        @BindView(R.id.timeText)    StrikeoutTextView timeText;
+        @BindView(R.id.penaltyText) TextView          penaltyText;
+        @BindView(R.id.date)        TextView          dateText;
+        @BindView(R.id.commentIcon) ImageView         commentIcon;
 
         public TimeHolder(View view) {
             super(view);

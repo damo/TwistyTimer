@@ -245,7 +245,7 @@ public final class Prefs {
      * cross") should be shown after the generation of a scramble sequence.
      * X-cross hints will not be shown if basic cross hints are not first
      * enabled (i.e., this method checks both {@link #isScrambleEnabled()} and
-     * {@link #showCrossHints(PuzzleType) first).
+     * {@link #showCrossHints(PuzzleType)} first).
      *
      * @param puzzleType
      *     The type of the puzzle for which hints may be shown. Hints can only
@@ -339,7 +339,7 @@ public final class Prefs {
      * @return The inspection time (in seconds).
      */
     public static int getInspectionTime() {
-        return Prefs.getInt(
+        return getInt(
             R.string.pk_inspection_time_s, R.integer.default_inspection_time_s);
     }
 
@@ -352,7 +352,7 @@ public final class Prefs {
      * @return The scale factor for the size of the timer display.
      */
     public static float getTimerDisplayScale() {
-        return Prefs.getInt(
+        return getInt(
             R.string.pk_timer_display_scale_pc,
             R.integer.default_timer_display_scale_pc) / 100f;
     }
@@ -366,7 +366,7 @@ public final class Prefs {
      * @return The scale factor for the size of the scramble text.
      */
     public static float getScrambleTextScale() {
-        return Prefs.getInt(
+        return getInt(
             R.string.pk_scramble_text_scale_pc,
             R.integer.default_scramble_text_scale_pc) / 100f;
     }
@@ -380,7 +380,7 @@ public final class Prefs {
      * @return The scale factor for the size of the scramble image.
      */
     public static float getScrambleImageScale() {
-        return Prefs.getInt(
+        return getInt(
             R.string.pk_scramble_image_scale_pc,
             R.integer.default_scramble_image_scale_pc) / 100f;
     }

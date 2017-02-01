@@ -14,6 +14,7 @@ import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Parcelable;
 import android.os.Process;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -832,23 +833,50 @@ public class TimerFragment extends BaseMainFragment
         // Create the puzzle timer. When created, the timer will be in the
         // "sleeping" state. It will call the listeners until after
         // "PuzzleTimer.wake()" is called in "onResume()".
+        //
+        // The listeners are removed in "onDestroyView()".
         mTimer = new PuzzleTimer(this);
         if (DEBUG_ME) mTimer.addOnTimerEventListener(new OnTimerEventLogger());
         mTimer.addOnTimerEventListener(this);
         mTimer.addOnTimerEventListener(mvTimerView);
         mTimer.setOnTimerRefreshListener(mvTimerView);
 
+        boolean isTimerStateRestored = false;
+
         if (savedInstanceState != null) {
-            // If the "Parcelable" is "null", "onRestoreInstanceState" will
-            // have no effect.
-            mTimer.onRestoreInstanceState(
-                savedInstanceState.getParcelable(KEY_PUZZLE_TIMER_STATE));
+            final Parcelable timerState
+                = savedInstanceState.getParcelable(KEY_PUZZLE_TIMER_STATE);
+
+            if (timerState != null) {
+                mTimer.onRestoreInstanceState(timerState);
+                isTimerStateRestored = true;
+            }
 
             // The unsolved scramble may be null. If not null, it will *not*
             // have any image, as images are not saved and restored. An image
             // will be generated later in "onResume()", if needed.
             mUnsolvedScramble
                 = savedInstanceState.getParcelable(KEY_UNSOLVED_SCRAMBLE);
+        }
+
+        if (!isTimerStateRestored) {
+            // The timer state was not restored from the instance state (or
+            // there was no instance state), so look to the persistent timer
+            // state and see if that can be restored instead. The persistent
+            // state is the state that survives across app instances.
+            final String timerPersistentState = Prefs.getStringRawDefault(
+                R.string.pk_puzzle_timer_persistent_state, null);
+
+            if (timerPersistentState != null) {
+                try {
+                    mTimer.onRestorePersistentState(timerPersistentState);
+                } catch (Exception e) {
+                    // If there is an error, just log it and continue on; that
+                    // is better than failing each time the app is started and
+                    // making it unusable.
+                    Log.e(TAG, "Failed to restore persistent timer state.", e);
+                }
+            }
         }
 
         // If the statistics are already loaded, the update notification will
@@ -1008,6 +1036,15 @@ public class TimerFragment extends BaseMainFragment
         // point in refreshing the UI if the timer display is not (fully)
         // visible. Re-awaken it in "onResume()".
         mTimer.sleep();
+
+        // Now that the timer is asleep ("PuzzleTimer.sleep()" is synchronous),
+        // write the persistent timer state to the shared preferences. This will
+        // survive if the application is restarted. This allows a running timer
+        // to survive even if the device is rebooted!
+        Prefs.edit()
+             .putString(R.string.pk_puzzle_timer_persistent_state,
+                        mTimer.onSavePersistentState())
+             .apply();
     }
 
     /**
@@ -1077,6 +1114,15 @@ public class TimerFragment extends BaseMainFragment
         StatisticsCache.getInstance().unregisterObserver(this);
         unregisterReceiver(mUIInteractionReceiver);
         unregisterReceiver(mSolveDataChangedReceiver);
+
+        // NOTE: If DEBUG_ME is raised, an extra "OnTimerEventLogger" listener
+        // instance is added in "onActivityCreated()". It is not removed here,
+        // as no reference to that instance is retained and it would be overkill
+        // to do so just for debugging. That logger listener does not reference
+        // this fragment or any view, so not removing it should not cause leaks.
+        mTimer.removeOnTimerEventListener(this);
+        mTimer.removeOnTimerEventListener(mvTimerView);
+        mTimer.setOnTimerRefreshListener(null);
 
         super.onDestroyView();
     }
@@ -1151,7 +1197,7 @@ public class TimerFragment extends BaseMainFragment
                 break;
 
             case CUE_INSPECTION_STARTED:
-            case CUE_INSPECTION_RESUMED:
+            case CUE_INSPECTION_REASSERTED:
             case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
             case CUE_INSPECTION_SOLVE_READY_TO_START:
                 break;
@@ -1169,6 +1215,8 @@ public class TimerFragment extends BaseMainFragment
                 break;
 
             case CUE_SOLVE_STARTED:
+            case CUE_SOLVE_PAUSED:
+            case CUE_SOLVE_RESUMED:
                 break;
 
             case CUE_CANCELLING:

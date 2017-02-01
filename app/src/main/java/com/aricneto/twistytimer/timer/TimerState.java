@@ -203,29 +203,6 @@ public class TimerState implements Parcelable {
      * The time at which the solve timer was started. Will be {@link #NEVER} if
      * the solve was not started, or has not yet started.
      */
-    // NOTE: If implementing a "pause()" feature, a new "mIsSolvePaused" flag
-    // could be added. "pause()" would save the current time in
-    // "mSolveStoppedAt" and set "mIsSolvePaused" to true. "resume()" would
-    // take the current time, subtract the difference between
-    // "mSolveStartedAt" and "mSolveStoppedAt", use that result to set a new
-    // value for "mSolveStartedAt", set "mSolveStoppedAt" back to "-1" and
-    // set "mIsSolvePaused" to false. A similar effect could be achieved with
-    // a new "mSolvePausedAt" field, which might be a bit less confusing than
-    // combining a flag with two meanings for "mSolveStoppedAt". In either
-    // case, "mSolveStartedAt" is updated so that the elapsed time between it
-    // and "now" is correct on resuming.
-    //
-    // IMPORTANT: On second thoughts, the "mSolveStoppedAt", etc. use the
-    // system uptime to measure elapsed time (which is the correct approach).
-    // However, if the timer is paused and then the device is rebooted, the
-    // correction required to the uptime might result in the start time being
-    // negative (e.g., if the timer is paused at 5 minutes, the system is
-    // rebooted, and the timer is started 1 minute after rebooting, the
-    // "corrected" value for "mSolveStartedAt" would be -4 minutes. It would
-    // also be possible for the start time to be corrected to "-1" and that
-    // would cause all sorts of problems. Therefore, the time value used to
-    // indicate "not started" and "not stopped" has been changed from -1 to
-    // "Long.MIN_VALUE", which should be safer.
     private long mSolveStartedAt = NEVER;
 
     /**
@@ -302,7 +279,7 @@ public class TimerState implements Parcelable {
      * described by this timer state. The {@code Solve} will capture the results
      * of the attempt.
      */
-    @Nullable // May be null only when "mStage" is "UNUSED".
+    @Nullable
     private Solve mSolve;
 
     /**
@@ -484,7 +461,7 @@ public class TimerState implements Parcelable {
                     isUsed = isInspectionEnabled();
                     break;
 
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
                     // This cue is not loaded by default. It is fired from the
                     // "INSPECTION_STARTED" stage, but *only* if returning to
                     // that stage from "INSPECTION_SOLVE_HOLDING_FOR_START".
@@ -527,6 +504,18 @@ public class TimerState implements Parcelable {
                 case CUE_CANCELLING:
                 case CUE_STOPPING:
                     isUsed = true;
+                    break;
+
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+                    // These cues are not loaded by default. "CUE_SOLVE_PAUSED"
+                    // is fired from the "SOLVE_PAUSED" stage, but *only* if
+                    // transitioning to that stage from "SOLVE_STARTED", so the
+                    // cue is loaded on demand by "SOLVE_STARTED". Similarly,
+                    // "CUE_SOLVE_PAUSED" is only fired on returning from
+                    // "SOLVE_PAUSED" to "SOLVE_STARTED", so the cue is loaded
+                    // on demand by "SOLVE_PAUSED".
+                    isUsed = false;
                     break;
 
                 default:
@@ -958,6 +947,9 @@ public class TimerState implements Parcelable {
             case INSPECTION_SOLVE_HOLDING_FOR_START:
             case INSPECTION_SOLVE_READY_TO_START:
             case SOLVE_STARTED:
+            // "SOLVE_PAUSED" counts as "running", as timer is not stopped, is
+            // showing the elapsed time, and has no final result ready yet.
+            case SOLVE_PAUSED:
                 return true;
 
             default:

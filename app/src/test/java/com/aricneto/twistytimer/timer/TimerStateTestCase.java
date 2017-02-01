@@ -232,7 +232,7 @@ public class TimerStateTestCase {
         // Check the expected number of cue values to detect changes to the
         // "TimerCue" enum that might affect the completeness of these tests.
         assertEquals("Test coverage is probably not complete.",
-            15, TimerCue.values().length);
+            17, TimerCue.values().length);
 
         // If inspection is disabled, not all cues can be fired. If inspection
         // is enabled, some of the inspection-time-remaining cues can only be
@@ -249,9 +249,12 @@ public class TimerStateTestCase {
         // the code inspector to warn if enum values are missing from the cases.
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                // NOTE: "CUE_INSPECTION_RESUMED" is a special case. It is
-                // not enabled by default for *any* timer state configuration.
-                case CUE_INSPECTION_RESUMED:
+                // NOTE: "CUE_INSPECTION_REASSERTED", "CUE_SOLVE_PAUSED" and
+                // "CUE_SOLVE_RESUMED are special cases. They are not enabled
+                // by default for *any* timer state configuration.
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
 
                 case CUE_INSPECTION_HOLDING_FOR_START:
                 case CUE_INSPECTION_READY_TO_START:
@@ -284,11 +287,14 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_HOLDING_FOR_START:
                 case CUE_INSPECTION_READY_TO_START:
                 case CUE_INSPECTION_STARTED:
                 case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
-                case CUE_INSPECTION_RESUMED:
                 case CUE_INSPECTION_SOLVE_READY_TO_START:
                 case CUE_INSPECTION_7S_REMAINING:
                 case CUE_INSPECTION_3S_REMAINING:
@@ -317,7 +323,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_HOLDING_FOR_START:
                 case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
                 case CUE_SOLVE_HOLDING_FOR_START:
@@ -350,7 +359,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_SOLVE_READY_TO_START:
                 case CUE_SOLVE_HOLDING_FOR_START:
                     assertFalse("Can fire: " + cue, ts.canFireTimerCue(cue));
@@ -384,7 +396,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_HOLDING_FOR_START:
                 case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
                 case CUE_INSPECTION_7S_REMAINING:
@@ -414,7 +429,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_HOLDING_FOR_START:
                 case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
                 case CUE_INSPECTION_7S_REMAINING:
@@ -444,7 +462,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_HOLDING_FOR_START:
                 case CUE_INSPECTION_SOLVE_HOLDING_FOR_START:
                 case CUE_SOLVE_HOLDING_FOR_START:
@@ -477,7 +498,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_7S_REMAINING:
                 case CUE_INSPECTION_3S_REMAINING:
                 case CUE_SOLVE_HOLDING_FOR_START:
@@ -507,7 +531,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_7S_REMAINING:
                 case CUE_INSPECTION_3S_REMAINING:
                 case CUE_SOLVE_HOLDING_FOR_START:
@@ -537,7 +564,10 @@ public class TimerStateTestCase {
 
         for (TimerCue cue : TimerCue.values()) {
             switch (cue) {
-                case CUE_INSPECTION_RESUMED:
+                case CUE_INSPECTION_REASSERTED:
+                case CUE_SOLVE_PAUSED:
+                case CUE_SOLVE_RESUMED:
+
                 case CUE_INSPECTION_7S_REMAINING:
                 case CUE_SOLVE_HOLDING_FOR_START:
                 case CUE_SOLVE_READY_TO_START:
@@ -934,6 +964,7 @@ public class TimerStateTestCase {
                 case SOLVE_HOLDING_FOR_START:
                 case SOLVE_READY_TO_START:
                 case SOLVE_STARTED:
+                case SOLVE_PAUSED:
                 case CANCELLING:
                 case STOPPING:
                 case STOPPED:
@@ -972,6 +1003,7 @@ public class TimerStateTestCase {
                 case SOLVE_HOLDING_FOR_START:
                 case SOLVE_READY_TO_START:
                 case SOLVE_STARTED:
+                case SOLVE_PAUSED:
                 case CANCELLING:
                 case STOPPING:
                     assertFalse(ts.isStopped());
@@ -1018,6 +1050,7 @@ public class TimerStateTestCase {
                 case INSPECTION_SOLVE_HOLDING_FOR_START:
                 case INSPECTION_SOLVE_READY_TO_START:
                 case SOLVE_STARTED:
+                case SOLVE_PAUSED:
                     assertTrue(ts.isRunning());
                     break;
 

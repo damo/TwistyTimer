@@ -481,27 +481,27 @@ public final class Penalties {
 
     /**
      * <p>
-     * Incurs an additional penalty in the phase of the attempt after the
-     * solve timer starts. This can be while the solve timer is running, or
-     * after the solve timer has stopped. These penalties are not fixed and
-     * can be annulled by {@link #annulPostStartPenalty(Penalty)}. At
-     * present, the user interface allows these to be incurred "manually" by
-     * the user after the solve timer is stopped. There is no restriction on
-     * the order in which the penalties may be incurred.
+     * Incurs an additional penalty in the phase of the attempt after the solve
+     * timer starts. This can be while the solve timer is running, or after
+     * the solve timer has stopped. These penalties are not fixed and can be
+     * annulled by {@link #annulPostStartPenalty(Penalty)}. At present, the
+     * user interface allows these to be incurred "manually" by the user after
+     * the solve timer is stopped. There is no restriction on the order in
+     * which the penalties may be incurred.
      * </p>
      * <p>
      * See also {@link #canIncurPostStartPenalty(Penalty)}.
      * </p>
      *
      * @param penalty
-     *     The penalty to be incurred. If {@link Penalty#NONE} or {@code
-     *     null}, the penalty will be ignored. Only one DNF penalty can be
-     *     incurred in total across both the pre- and post-start penalties;
-     *     further DNF penalties will be ignored. More than one "+2" penalty
-     *     may be added and will be accumulated, but there is a maximum limit
-     *     on the number of "+2" penalties. A DNF penalty does not replace a
-     *     "+2" penalty already incurred. If a pre-start DNF has been
-     *     incurred, no post-start DNF or "+2" penalties may be incurred.
+     *     The penalty to be incurred. If {@link Penalty#NONE} or {@code null},
+     *     the penalty will be ignored. Only one DNF penalty can be incurred in
+     *     total across both the pre- and post-start penalties; further DNF
+     *     penalties will be ignored. More than one "+2" penalty may be added
+     *     and will be accumulated, but there is a maximum limit on the number
+     *     of "+2" penalties. A DNF penalty does not replace a "+2" penalty
+     *     already incurred. If a pre-start DNF has been incurred, no post-start
+     *     DNF or "+2" penalties may be incurred.
      *
      * @return
      *     A new {@code Penalties} instance with additional incurred penalty;
@@ -637,7 +637,8 @@ public final class Penalties {
 
     /**
      * Gets a compact string representation of this collection of penalties.
-     * The penalties are described in the form: "{pre-start,post-start}".
+     * The penalties are described in the form: "{pre-start,post-start}", for
+     * example, "{+2x1,DNF}".
      *
      * @return A string representation of these penalties.
      */

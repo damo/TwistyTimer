@@ -74,7 +74,8 @@ public class OffsetValuesLineChartRenderer extends LineChartRenderer {
      */
     @Override
     public void drawValue(Canvas c, ValueFormatter formatter, float value,
-                          Entry entry, int dataSetIndex, float x, float y) {
+                          Entry entry, int dataSetIndex, float x, float y,
+                          int color) {
         // NOTE: The given value of "y" is calculated in "LineChartRenderer
         // .drawValues". It is the Y-coordinate for the *baseline* of the
         // drawn text. By default, it is offset above the data point based on
@@ -105,6 +106,7 @@ public class OffsetValuesLineChartRenderer extends LineChartRenderer {
         // in the "text color" and then draw the text on top in a contrasting
         // color (maybe just black or white).
         super.drawValue(
-            c, formatter, value, entry, dataSetIndex, x, y + mValueYOffsetPX);
+            c, formatter, value, entry, dataSetIndex,
+            x, y + mValueYOffsetPX, color);
     }
 }

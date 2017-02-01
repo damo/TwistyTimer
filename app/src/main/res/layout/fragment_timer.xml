@@ -148,7 +148,7 @@
                 android:background="?android:attr/selectableItemBackground"
                 android:clickable="true"
                 android:padding="8dp"
-                android:text="+2"
+                android:text="+2s"
                 android:textSize="@dimen/qab_text_size_normal"
                 android:textStyle="bold"
                 android:textColor="?colorTimerText"/>
@@ -163,7 +163,7 @@
                 android:clickable="true"
                 android:enabled="false"
                 android:padding="8dp"
-                android:text="-2"
+                android:text="-2s"
                 android:textSize="@dimen/qab_text_size_normal"
                 android:textStyle="bold"
                 android:textColor="?colorTimerText"/>

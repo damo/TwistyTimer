@@ -23,12 +23,13 @@ import org.json.JSONObject;
  * <p>
  * Solves can be created manually or by importing solve data from external
  * files or database back-ups files. However, solves are typically created in
- * the context of running a {@link com.aricneto.twistytimer.timer.PuzzleTimer
- * PuzzleTimer}. On completing a solve attempt, the new solve may be saved and
- * edited. If edited, the puzzle timer may need to be kept up-to-date with
- * respect to any changes made to the elapsed time or penalties, so that the
- * changes are reflected in the timer's display. See the description of that
- * class for details on how that might be manged.
+ * the context of running a
+ * {@link com.aricneto.twistytimer.timer.PuzzleTimer PuzzleTimer}. On completing
+ * a solve attempt, the new solve may be saved and edited. If edited, the puzzle
+ * timer may need to be kept up-to-date with respect to any changes made to the
+ * elapsed time or penalties, so that the changes are reflected in the timer's
+ * display. See the description of that class for details on how that might be
+ * manged.
  * <p>
  * {@code Solve} implements the {@code android.os.Parcelable} interface,
  * allowing the state of a solve to be saved and restored in the context of
@@ -606,9 +607,9 @@ public class Solve implements Parcelable {
 
     /**
      * Indicates if this solve has a comment or not. The comment will be
-     * returned as an empty string if it was not set, or was set to {@code
-     * null}. This is a convenience method that will perform the necessary
-     * checks.
+     * returned as an empty string if it was not set, or was set to
+     * {@code null}. This is a convenience method that will perform the
+     * necessary checks.
      *
      * @return
      *     {@code true} if this solve has a comment; or {@code false} if it has

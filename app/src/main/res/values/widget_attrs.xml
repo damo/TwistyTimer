@@ -22,4 +22,13 @@ Attributes for custom widgets and views used in layout XML resources.
         <attr name="maxTimeHeight"   format="dimension"/>
     </declare-styleable>
 
+    <!--
+    The "StrikeoutTextView" draws a colored "X" over its content if the view
+    state is "checked".
+    -->
+    <declare-styleable name="StrikeoutTextView">
+        <attr name="strikeoutColor" format="reference|color"/>
+        <attr name="checked"        format="boolean"/>
+    </declare-styleable>
+
 </resources>

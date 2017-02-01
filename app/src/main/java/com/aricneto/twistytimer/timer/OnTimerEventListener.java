@@ -13,15 +13,15 @@ import android.support.annotation.NonNull;
  * displays the time value, not to the higher-level controller component.
  * </p>
  * <p>
- * {@link #onTimerCue(TimerCue, TimerState)} is notified when the state of
- * the timer changes in some way. Details of the current timer state are
- * given on each notification. The timer cues are expected to drive all of the
- * changes to the presentation of the timer, aside from the simpler task of
- * refreshing the displayed time. Timer cues are not intended to support every
- * possible requirement of the higher-level components (such as a {@code
- * Fragment} that manages the timer widget). The cues do not represent the
- * "states" of the component's state machine; they are triggers for
- * transitions between states that are defined by the component.
+ * {@link #onTimerCue(TimerCue, TimerState)} is notified when the state of the
+ * timer changes in some way. Details of the current timer state are given on
+ * each notification. The timer cues are expected to drive all of the changes
+ * to the presentation of the timer, aside from the simpler task of refreshing
+ * the displayed time. Timer cues are not intended to support every possible
+ * requirement of the higher-level components (such as a {@code Fragment} that
+ * manages the timer widget). The cues do not represent the "states" of the
+ * component's state machine; they are triggers for transitions between states
+ * that are defined by the component.
  * </p>
  * FIXME: Do the FIXMEs below belong in "PuzzleTimer"? Given the relationship
  * between the different interfaces there. Really on the the cues can be put in

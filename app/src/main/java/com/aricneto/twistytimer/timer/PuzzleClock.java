@@ -276,5 +276,11 @@ interface PuzzleClock {
      *
      * @return The current real time value in milliseconds since the Unix epoch.
      */
+    // NOTE: While "System.currentTimeMillis()" could be used directly, adding
+    // this method to the interface allows complete control over a notional
+    // system real-time clock from test cases. A test harness can create a
+    // special implementation of "PuzzleClock" that can inject known time
+    // values into the puzzle timer, so the results of the tests are reliable
+    // and predictable.
     long nowRealTime();
 }

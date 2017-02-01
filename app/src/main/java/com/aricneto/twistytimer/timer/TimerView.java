@@ -385,8 +385,8 @@ public class TimerView extends View
      * required state. If the color is changed, this view will be invalidated.
      *
      * @param isCued
-     *     {@code true} to highlight the text in a different color; or {@code
-     *     false} to restore the normal text color.
+     *     {@code true} to highlight the text in a different color; or
+     *     {@code false} to restore the normal text color.
      */
     public void cueInspectionTime(boolean isCued) {
         if (mShowStartCue) {
@@ -406,8 +406,8 @@ public class TimerView extends View
      * required state. If the color is changed, this view will be invalidated.
      *
      * @param isCued
-     *     {@code true} to highlight the text in a different color; or {@code
-     *     false} to restore the normal text color.
+     *     {@code true} to highlight the text in a different color; or
+     *     {@code false} to restore the normal text color.
      */
     public void cueSolveTime(boolean isCued) {
         if (mShowStartCue) {
@@ -441,8 +441,8 @@ public class TimerView extends View
     }
 
     /**
-     * Animates a change to the scale of the solve time text. See {@link
-     * #setSolveTimeScale(float)} for details.
+     * Animates a change to the scale of the solve time text. See
+     * {@link #setSolveTimeScale(float)} for details.
      *
      * @param scale
      *     The scale to apply to the solve time text in the range 0.0 to 1.0.
@@ -508,10 +508,10 @@ public class TimerView extends View
             case CUE_INSPECTION_STARTED:
                 cueInspectionTime(false);
                 // fall through
-            case CUE_INSPECTION_RESUMED:
-                // Highlight is *not* changed for "CUE_INSPECTION_RESUMED". The
-                // highlight may have been set for "CUE_INSPECTION_OVERRUN" and
-                // will stay valid.
+            case CUE_INSPECTION_REASSERTED:
+                // Highlight is *not* changed for "CUE_INSPECTION_REASSERTED".
+                // The highlight may have been set for "CUE_INSPECTION_OVERRUN"
+                // and will stay valid.
                 scaleSolveTimeTo(SCALE_SHOW_ONLY_INSPECTION_TIME);
                 break;
 

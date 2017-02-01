@@ -140,7 +140,7 @@ public class TimeUtils {
                 WCAMath.roundResult(resultTime),
                 "k':'mm'<small>:'ss'</small>'",
                      "m'<small>:'ss'</small>'",
-                     "m':'ss'<small>:'SS'</small>'",
+                     "m':'ss'<small>.'SS'</small>'",
                           "s'<small>.'SS'</small>'"));
     }
 

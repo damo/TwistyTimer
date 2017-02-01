@@ -69,4 +69,6 @@ THESE KEYS MUST NOT BE LOCALIZED!
     <string translatable="false" name="pk_prefix_last_used_category">savedSubtype</string> <!--**-->
     <string translatable="false" name="pk_last_used_is_history_enabled">lastUsedIsHistoryEnabled</string>
 
+    <string translatable="false" name="pk_puzzle_timer_persistent_state">puzzleTimerPersistentState</string>
+
 </resources>

@@ -4,9 +4,9 @@ package com.aricneto.twistytimer.timer;
  * <p>
  * The timer cues that are notified to the user-interface when the state of the
  * time changes at key points in its life-cycle. The cues are notified in a
- * call-back to {@link OnTimerEventListener#onTimerCue(TimerCue, TimerState)}.
- * The UI can respond by triggering some visual or audible cue to alert the
- * user to the change.
+ * call-back to {@link OnTimerEventListener#onTimerCue(TimerCue)}. The UI can
+ * respond by triggering some visual or audible cue to alert the user to the
+ * change.
  * </p>
  * <p>
  * </p>
@@ -16,7 +16,9 @@ package com.aricneto.twistytimer.timer;
  * fire and should not trigger changes to data, etc.
  * </p>
  * <p>
- *
+ * The purpose of timer cues may be most easily understood in the context of
+ * using them to support the playing of sound effects in response to a user's
+ * interactions with the puzzle timer. FIXME: elaborate.
  * </p>
  * <h2>Cue Sequence When Inspection is Enabled</h2>
  * <h2>Cue Sequence When Inspection is Disabled</h2>
@@ -227,7 +229,7 @@ public enum TimerCue {
      * </p>
      */
     // FIXME: Document this properly.
-    CUE_INSPECTION_RESUMED,
+    CUE_INSPECTION_REASSERTED,
 
     /**
      * <p>
@@ -343,14 +345,14 @@ public enum TimerCue {
     // FIXME: If a "hold" is lifted early, then "CUE_INSPECTION_STARTED" is
     // re-fired. However, it would be better if "CUE_INSPECTION_OVERRUN" were
     // re-fired instead if the time was overrun. Maybe it would be simpler to
-    // have a new cue, "CUE_INSPECTION_RESUMED" instead, as that would avoid
+    // have a new cue, "CUE_INSPECTION_REASSERTED" instead, as that would avoid
     // having "CUE_INSPECTION_STARTED" mean two things: started for the first
     // time having been cued as ready-to-start, or resumed after a hold was
     // cancelled. The former requires the start cue highlighting to be cleared,
-    // but the latter requires the highlighting to be set depending on
-    // whether or not there is an overrun. "CUE_INSPECTION_RESUMED" would just
-    // mean: show the inspection time at full scale AND LEAVE THE HIGHLIGHTING
-    // UNCHANGED.
+    // but the latter requires the highlighting to be set depending on whether
+    // or not there is an overrun. "CUE_INSPECTION_REASSERTED" would just mean:
+    // "Show the inspection time at full scale AND LEAVE THE HIGHLIGHTING
+    // UNCHANGED".
     CUE_INSPECTION_OVERRUN,
 
     // FIXME: Document this.
@@ -406,6 +408,10 @@ public enum TimerCue {
      */
     CUE_SOLVE_STARTED,
 
+    // FIXME: Document these:
+    CUE_SOLVE_PAUSED,
+    CUE_SOLVE_RESUMED,
+
     /**
      * <p>
      * The timer has stopped running. This is notified only once per solve
@@ -422,8 +428,8 @@ public enum TimerCue {
      * Note: if the timer is cancelled, this cue will report the timer state
      * that is <i>being cancelled</i>, not the previous timer state that will
      * be restored. The restored previous timer state will be reported by
-     * {@link OnTimerEventListener#onTimerCancelled(TimerState)} just
-     * <i>after</i> {@code CUE_STOPPING} is notified.
+     * {@link OnTimerEventListener#onTimerSet(TimerState)} just <i>after</i>
+     * {@code CUE_STOPPING} is notified.
      * </p>
      * <p>
      * Expectation: The UI may take action to return to the normal state when
@@ -458,8 +464,8 @@ public enum TimerCue {
      * Note: if the timer is cancelled, this cue will report the timer state
      * that is <i>being cancelled</i>, not the previous timer state that will
      * be restored. The restored previous timer state will be reported by
-     * {@link OnTimerEventListener#onTimerCancelled(TimerState)} just
-     * <i>after</i> {@code CUE_STOPPING} is notified.
+     * {@link OnTimerEventListener#onTimerSet(TimerState)} just <i>after</i>
+     * {@code CUE_STOPPING} is notified.
      * </p>
      * <p>
      * Expectation: The UI may take action to return to the normal state when
