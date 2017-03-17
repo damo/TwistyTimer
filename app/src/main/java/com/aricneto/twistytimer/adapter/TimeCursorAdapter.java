@@ -2,10 +2,10 @@ package com.aricneto.twistytimer.adapter;
 
 import android.content.Context;
 import android.database.Cursor;
-import android.graphics.Paint;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.widget.CardView;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +22,7 @@ import com.aricneto.twistytimer.items.Penalties;
 import com.aricneto.twistytimer.items.Penalty;
 import com.aricneto.twistytimer.items.Solve;
 import com.aricneto.twistytimer.layout.StrikeoutTextView;
-import com.aricneto.twistytimer.listener.DialogListener;
+import com.aricneto.twistytimer.utils.TTIntent;
 import com.aricneto.twistytimer.utils.ThemeUtils;
 import com.aricneto.twistytimer.utils.TimeUtils;
 
@@ -34,7 +34,9 @@ import java.util.HashSet;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
-import static com.aricneto.twistytimer.utils.TTIntent.*;
+import static com.aricneto.twistytimer.utils.TTIntent
+    .ACTION_SOLVES_SELECTION_CHANGED;
+import static com.aricneto.twistytimer.utils.TTIntent.CATEGORY_UI_INTERACTIONS;
 
 /**
  * A cursor adapter to support the presentation of the solve times in the
@@ -43,21 +45,15 @@ import static com.aricneto.twistytimer.utils.TTIntent.*;
  * times. When a time-card is clicked.
  */
 public class TimeCursorAdapter
-        extends CursorRecyclerAdapter<RecyclerView.ViewHolder>
-        implements DialogListener {
+        extends CursorRecyclerAdapter<RecyclerView.ViewHolder> {
     private final FragmentManager mFragmentManager;
 
     private int mCardColor;
     private int mSelectedCardColor;
 
-    private boolean mIsInSelectionMode;
-
     // A Set will be more efficient than a List, as "contains(Long)" is used
     // a lot.
     private Collection<Long> mSelectedSolveIDs = new HashSet<>();
-
-    // Locks opening new windows until the last one is dismissed
-    private boolean mIsLocked;
 
     public TimeCursorAdapter(Context context, Cursor cursor,
                              TimerListFragment listFragment) {
@@ -67,12 +63,21 @@ public class TimeCursorAdapter
             context, R.attr.colorItemListBackground);
         mSelectedCardColor = ThemeUtils.fetchAttrColor(
             context, R.attr.colorItemListBackgroundSelected);
+
+        // Indicate that each solve record has a unique ID. This is needed for
+        // "RecyclerView.findViewHolderForItemId()" to work in "unselectAll()".
+        setHasStableIds(true);
     }
 
     @Override
     public Cursor swapCursor(Cursor cursor) {
         super.swapCursor(cursor);
-        unselectAll();
+
+        // The data has changed, so "bindSolveToViewHolder()" will set up each
+        // view holder afresh and there is no need to restore background colors.
+        mSelectedSolveIDs.clear();
+        broadcastSelectionChanged();
+
         return cursor;
     }
 
@@ -95,17 +100,6 @@ public class TimeCursorAdapter
             (TimeHolder) viewHolder, DatabaseHandler.getCurrentSolve(cursor));
     }
 
-    @Override
-    public void onDismissDialog() {
-        setLocked(false);
-    }
-
-    public void unselectAll() {
-        mSelectedSolveIDs.clear();
-        mIsInSelectionMode = false;
-        broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SELECTION_MODE_OFF);
-    }
-
     public void deleteAllSelected() {
         // Perform this operation on another thread. It will broadcast the
         // required action intent to notify interested parties after the change
@@ -115,24 +109,39 @@ public class TimeCursorAdapter
             mSelectedSolveIDs, null, null);
     }
 
+    public void unselectAll(RecyclerView recyclerView) {
+        for (long solveID : mSelectedSolveIDs) {
+            final TimeHolder holder
+                = (TimeHolder) recyclerView.findViewHolderForItemId(solveID);
+
+            // A selected solve that is not visible in the viewport might not
+            // be bound to any view holder, so check first.
+            if (holder != null) {
+                holder.card.setCardBackgroundColor(mCardColor);
+            }
+        }
+
+        mSelectedSolveIDs.clear();
+        broadcastSelectionChanged();
+    }
+
     private void toggleSelection(long id, CardView card) {
-        // TODO: Have this class track the number of selections and add that to
-        // the intent. There will be no need for separate actions for selection
-        // mode and selected times.
         if (! mSelectedSolveIDs.contains(id)) {
             mSelectedSolveIDs.add(id);
             card.setCardBackgroundColor(mSelectedCardColor);
-            broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SOLVE_SELECTED);
         } else {
             mSelectedSolveIDs.remove(id);
             card.setCardBackgroundColor(mCardColor);
-            broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SOLVE_UNSELECTED);
         }
 
-        if (mSelectedSolveIDs.size() == 0) {
-            mIsInSelectionMode = false;
-            broadcast(CATEGORY_UI_INTERACTIONS, ACTION_SELECTION_MODE_OFF);
-        }
+        broadcastSelectionChanged();
+    }
+
+    private void broadcastSelectionChanged() {
+        TTIntent.builder(
+            CATEGORY_UI_INTERACTIONS, ACTION_SOLVES_SELECTION_CHANGED)
+                .selectionCount(mSelectedSolveIDs.size())
+                .broadcast();
     }
 
     private void bindSolveToViewHolder(
@@ -141,31 +150,44 @@ public class TimeCursorAdapter
             mSelectedSolveIDs.contains(solve.getID())
                 ? mSelectedCardColor : mCardColor);
 
-        holder.root.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (mIsInSelectionMode) {
-                    toggleSelection(solve.getID(), holder.card);
-                } else if (!isLocked()) {
-                    setLocked(true);
-                    EditSolveDialog timeDialog
-                        = EditSolveDialog.newInstance(solve);
-//                    timeDialog.setDialogListener(TimeCursorAdapter.this);
-                    timeDialog.show(mFragmentManager, "time_dialog");
-                }
-            }
-        });
+        // Normally, clicking a solve time view will open the dialog, but a
+        // long-click will *select* that solve time and then further (normal)
+        // clicks will add/remove (toggle) solves from that selection. Once
+        // the long-click selects the first solve, long-clicking will have no
+        // effect until the selection count reaches zero again. Once back at
+        // zero, clicks will open the dialog again until the next long-click.
+        //
+        // Changes to the selection are broadcast (to "TimerMainFragment") and
+        // it maintains an action mode in its title bar that shows the count.
+        // If that action mode is exited directly via its back button, it will
+        // broadcast "ACTION_CLEAR_SELECTED_SOLVES" back to "TimerListFragment",
+        // which will notify this adapter to clear the selection.
 
         holder.root.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
-                if (!mIsInSelectionMode) {
-                    mIsInSelectionMode = true;
-                    broadcast(CATEGORY_UI_INTERACTIONS,
-                              ACTION_SELECTION_MODE_ON);
+                if (mSelectedSolveIDs.size() == 0) {
                     toggleSelection(solve.getID(), holder.card);
                 }
                 return true;
+            }
+        });
+
+        holder.root.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Log.d("TimeCursorAdapter", "Time record clicked!");
+                Log.d("TimeCursorAdapter",
+                    "  selection count=" + mSelectedSolveIDs.size());
+
+                if (mSelectedSolveIDs.size() > 0) {
+                    Log.d("TimeCursorAdapter", "  Toggling selection...");
+                    toggleSelection(solve.getID(), holder.card);
+                } else {
+                    Log.d("TimeCursorAdapter", "  Opening edit dialog...");
+                    EditSolveDialog.newInstance(solve)
+                                   .show(mFragmentManager, "time_dialog");
+                }
             }
         });
 
@@ -223,14 +245,6 @@ public class TimeCursorAdapter
         }
     }
 
-    private boolean isLocked() {
-        return mIsLocked;
-    }
-
-    private void setLocked(boolean isLocked) {
-        mIsLocked = isLocked;
-    }
-
     static class TimeHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.card)        CardView          card;
         @BindView(R.id.root)        RelativeLayout    root;
@@ -239,7 +253,7 @@ public class TimeCursorAdapter
         @BindView(R.id.date)        TextView          dateText;
         @BindView(R.id.commentIcon) ImageView         commentIcon;
 
-        public TimeHolder(View view) {
+        TimeHolder(View view) {
             super(view);
             ButterKnife.bind(this, view);
         }

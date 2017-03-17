@@ -4,8 +4,8 @@ import android.support.annotation.NonNull;
 
 /**
  * <p>
- * An interface for components requiring notification of timer events. Events
- * include user-interface cues that are synchronised with the life-cycle
+ * An interface for components requiring notification of timer life-cycle
+ * events. Events include user-interface cues that are synchronised with the life-cycle
  * events of a {@link PuzzleTimer} and events that mark the final delivery of
  * the definitive timer result when the timer is stopped. The periodic
  * refresh events are delivered via a separate {@link OnTimerRefreshListener}
@@ -47,215 +47,91 @@ import android.support.annotation.NonNull;
  * @author damo
  */
 public interface OnTimerEventListener {
-    // IMPORTANT: "onTimerCue" sometimes seems redundant for cues like
-    // "CUE_STARTING" where there is already a dedicated "onTimerStarted".
-    // However, the intention is to separate the "definitive" call-backs from
-    // the "less reliable" cues such that the cues are used for things like
-    // visual transitions and sound effects and the other are used for
-    // initialisation and management of the solve data.
-
-    // FIXME: Seriously consider dropping "TimerState" parameter. That would
-    // make it very clear that a "cue" is only a prompt to change some UI
-    // state or perform some UI action and has nothing to do with updating the
-    // time value (done by "onTimerSet" and "OnTimerRefreshListener.*") or
-    // saving/restoring solves, etc. Would this be workable?
-//    void onTimerCue(@NonNull TimerCue cue, @NonNull TimerState timerState);
-    void onTimerCue(@NonNull TimerCue cue);
-
-    // FIXME: Should the "onTimerCue" be sandwiched between some new
-    // "onTimerCreated" (or something) method and the later
-    // "onTimerNewResult" (etc.) methods? It may be useful to have something
-    // to call to initialise the current timer state before it is run.
-    // However, if the sequence is "onTimerCue", "onTimerNewResult",
-    // "onTimerCue", "onTimerNewResult", "onTimerCue", "onTimerNewResult",
-    // etc., then isn't "onTimerCue" already "sandwiched"? It just needs to
-    // be allowed to call "onTimerNewResult" prior to any "onTimerCue" to set
-    // up the initial, quiet timer state. However, this is a bit less obvious
-    // if the timer is being restored while it is running, as there is no
-    // desire to save any "result". Perhaps this is just an issue for the FSM
-    // in the fragment. Let's see how it turns out.
-
-    // OK: This means "update the timer display to match the given state". It
-    // can be called after "wake()" or "reset()" or just after a state "push
-    // ()" or "pop()". Yeah, "set" sounds right for all of those cases.
-    //
-    // This is, therefore, the definitive "just-show-this-state" method. It
-    // differs from the cues in that it is guaranteed to fire at the right
-    // time, every time; it does not require any special operations on the
-    // data, unlike "onTimerStarted" (create Solve) , "onTimerStopped" (save
-    // solve), or "onTimerCancelled" (FIXME: WTF?) is this needed any more?
-    // Does it just get merged into "onTimerSet" in the same way that
-    // "onTimerReset" did? What specific operation would be performed on the
-    // data to handle a "cancel()"? Isn't it just a case of discarding it and
-    // showing the "popped" state (which could be "UNUSED")? There could be a
-    // cue fired to allow a sound effect, or something, but otherwise not
-    // much is needed. The only issue might be that of the solve is cancelled
-    // after the timer has started, the restored previous solve might cause
-    // confusion. Perhaps there is a case to be made for discarding the
-    // previous solve when "onTimerStarted" gets called, so cancelling after
-    // that would just return to a "0.00" state with no editing controls.
-    // OTOH, a cue could be used to display some toast that would identify
-    // the restored state as being from the previous solve attempt. Still, it
-    // might be safer to disable the editing controls in case it is deleted
-    // by accident.
-
-    // FIXME: Document that "timerState" is never a cancelled timer state.
-
-    // FIXME: Document that this is called each time the penalties change,
-    // even if the inspection timer is running. In such cases, it will be
-    // called *before* the respective cue (e.g., "CUE_INSPECTION_OVERRUN").
-
-    // FIXME: This should be called when...
-    //
-    // 1. A timer is woken from its sleeping state.
-    //
-    // 2. A new, unused timer is created (e.g., after "reset()" or "push()").
-    //
-    // 3. A timer is restored (though it should be restored into a sleeping
-    //    state, so "wake()" triggers the call-back).
-    //
-    // 4. When a penalty has been incurred (allowing updates to the headline).
-    //
-    // 5. When the inspection timer is presented (allowing updates to the
-    //    headline).
-    //
-    // 6. When the solve timer is presented (headline, again).
-    //
-    // 7. When the timer is stopped (final "result" headline, and now include
-    //    time penalties in reported elapsed solve time).
-    //
-    // If inspection is enabled, "Inspection" should appear in the headline if
-    // the inspection time is showing. Therefore, on the "HOLDING" and "READY"
-    // stages. However, not on the "INSPECTION_SOLVE_HOLDING_FOR_START" or
-    // "INSPECTION_SOLVE_READY_TO_START" stages, as inspection should still be
-    // showing. However, is that not really just up to the UI? The test would
-    // be that "isInspectionRunning()" would still be true.
-    //
-    // If I always call "onTimerSet" or any stage transition---or maybe any
-    // "setUp()" call---and for any new penalty, then that might be
-    // sufficient. For the most part, there is not much repetition of stages,
-    // so there is not much overhead in doing that. HOWEVER, there might be a
-    // problem with things like calling "onTimerSet" for a cancelled stage
-    // instead of the restored state. Perhaps do it piecemeal and skip some of
-    // the stages where it is not necessary.
-    //
-    // "wake()" can only restore into these stages:
-    //
-    //     UNUSED
-    //     INSPECTION_STARTING
-    //     INSPECTION_STARTED
-    //     SOLVE_STARTING
-    //     SOLVE_STARTED
-    //     STOPPED
-    //
-    // Therefore, if "wake()" calls "onTimerSet", there will be no need to call
-    // it in "setUp" for these stages, unless it is necessary for these stages.
-    //
-    // The set-up for each of these stages transitions to another stage
-    // immediately, so "sleep()" never saves the timer state at these stages.
-    //
-    //     STARTING
-    //     CANCELLING
-    //     STOPPING
-    //
-    // If "sleep()" is called from these stages, the timer will be transitioned
-    // to "STOPPED" (via "CANCELLING") before its state is saved:
-    //
-    //     INSPECTION_HOLDING_FOR_START
-    //     INSPECTION_READY_TO_START
-    //     SOLVE_HOLDING_FOR_START
-    //     SOLVE_READY_TO_START
-    //
-    // If "sleep()" is called from these stages, the timer will be transitioned
-    // to "INSPECTION_STARTED" before its state is saved:
-    //
-    //     INSPECTION_SOLVE_READY_TO_START
-    //     INSPECTION_SOLVE_HOLDING_FOR_START
-    //
-    // "onTimerSet" is required as follows:
-    //
-    //     UNUSED **
-    //         An unused timer may have a specific headline (or no headline)
-    //         that may be different from other headlines. The inspection time
-    //         should be blank. The solve time may be "0.00", or maybe "-.--",
-    //         or some other such indication that the timer is not used.
-    //
-    //     INSPECTION_HOLDING_FOR_START ++
-    //     INSPECTION_READY_TO_START ++
-    //     INSPECTION_STARTING **
-    //     INSPECTION_STARTED **
-    //         All of these states will show the "Inspection" headline and
-    //         normal inspection time.
-    //
-    //     SOLVE_HOLDING_FOR_START ++
-    //     SOLVE_READY_TO_START ++
-    //     SOLVE_STARTING **
-    //     SOLVE_STARTED **
-    //         All of these stages will show the running solve headline and
-    //         the running elapsed time (which *excludes* penalties). The
-    //         inspection time should be blank. (Either inspection is not
-    //         enabled, or "isSolveRunning" will be true.) The elapsed solve
-    //         time may be masked or shown with lower precision than when
-    //         stopped or unused.
-    //
-    //     STOPPED **
-    //         The final "result" headline will be shown and the elapsed solve
-    //         time will *include* penalties. The inspection time will be blank.
-    //         FIXME: The concern here is that "STOPPED" is used when at the
-    //         end of a cancelled timer state, but the restored state will be
-    //         "STOPPED" or "UNUSED", so it would be wrong to call "onTimerSet"
-    //         twice (or would it). Either it is not wrong, or it needs to
-    //         change (which would be awkward), or maybe a new "CANCELLED"
-    //         stage is needed to avoid the problem. A timer's state could not
-    //         be restored at the "CANCELLED" stage, as the state is discarded
-    //         (popped) before "sleep()" has a chance to be called.
-    //
-    //     INSPECTION_SOLVE_READY_TO_START
-    //     INSPECTION_SOLVE_HOLDING_FOR_START
-    //     STARTING
-    //     CANCELLING
-    //     STOPPING
-    //         These never fire "onTimerSet". The "SOLVE" variants do not affect
-    //         any of the presentation of the continuing inspection countdown,
-    //         other than to show the "0.00" solve time alongside the normal
-    //         inspection headline and remaining inspection time. As "wake()
-    //         does not restore into those stages either, there is no need to
-    //         call "onTimerSet" for those stages. The only thing to note is
-    //         that the elapsed solve time should be formatted in readiness for
-    //         it being shown (as "0.00") in these stages. However, the time
-    //         should not be masked until the solve timer actually starts.
-    //
-    //
-    // ** = Stage can be restored from saved state and will be set up again by
-    // "wake()". The only concern is that "onTimerSet" does not, in the normal,
-    // course of events, need to be called from both a "...STARTING" and a
-    // "...STARTED" stage, it only needs to be called from the first one.
-    //
-    // ++ = Stage is only entered via transition from "STARTING" stage. In fact,
-    // "STARTING" redirects to a READY_TO_START stage if hold-to-start behaviour
-    // is disabled, otherwise it redirects to a HOLDING_FOR_START stage. If the
-    // latter, an "alarm tick" is used to trigger the next transition. This
-    // means that one one of each pair of HOLDING/READY stages is entered via
-    // "STARTING", which makes "STARTING" a good place to add a call to
-    // "onTimerSet" in respect of these stages. This also works well, as these
-    // stages are not restored after a "wake()", so there would be no other
-    // place where "onTimerSet" would be called.
-    //
-    // As the TimerCue that triggers transitions may need to have the text in
-    // the right format first, "onTimerSet" should always be called first,
-    // except in the case of the final "bracketing" call when "STOPPED".
-    //
-
-    // IMPORTANT: Document that this is only ever called in a small sub-set of
-    // possible timer states/stages.
+    /**
+     * <p>
+     * Notifies the listener that the state of the timer has been changed and
+     * that the listener should update its own state to reflect the new timer
+     * state.
+     * </p>
+     * <p>
+     * This method is only called from a subset of the possible timer states:
+     * only those states from which the state of the listener is expected to be
+     * determinable entirely from the timer state. It is not called for some
+     * transient or "interrupting" states, such as when a hold-to-start period
+     * elapses and a ready-to-start state is entered, or if alarms such as
+     * inspection period overruns or time-outs occur and penalties are incurred;
+     * only timer cues are notified in those cases. An example of when this is
+     * important is described for {@link #onTimerPenalty(TimerState)}.
+     * </p>
+     * <p>
+     * This method is always called at the start and end of a solve attempt, on
+     * the transition from the inspection countdown to the solve timer, when
+     * the timer is paused or resumed and when the timer state is restored
+     * after being saved (e.g., during a device configuration change or reboot).
+     * The timer state is never saved when it is in a hold-to-start or
+     * ready-to-start state; if that is the case, the timer state is first
+     * returned to the previous state (i.e., to the inspection countdown state
+     * if the hold or ready state is for starting the solve timer during the
+     * inspection period, or to the reset/unused state otherwise). Therefore,
+     * on restoring the timer state, it will not be in a transient or
+     * "interrupting" state, such as those described above.
+     * </p>
+     *
+     * @param timerState
+     *     The timer state to which the listener should synchronise its own
+     *     state.
+     */
     void onTimerSet(@NonNull TimerState timerState);
 
-    // IMPORTANT: This can only be called when the timer is running, but it can
-    // be called for *any* running timer stage (though really only during the
-    // inspection stages, as that is the only time a running timer can incur a
-    // penalty given the current app functionality).
-    // NOTE: Was "onTimerPenaltyIncurred", but what if a penalty was annulled?
-    // It doesn't happen now, but maybe in the future....
+    /**
+     * <p>
+     * Notifies the listener that the penalties for the solve attempt have
+     * changed. A new penalty may have been incurred or an existing penalty
+     * annulled.
+     * </p>
+     * <p>
+     * Penalties can be incurred automatically during the inspection period: if
+     * the inspection time reaches zero and an overrun period begins ("+2"); or
+     * if that overrun period expires ("DNF"). This penalty event may happen
+     * during any timer state, such as during the inspection period in a
+     * "hold-to-start" or "ready-to-start" state for the solve timer. This is
+     * unlike {@link #onTimerSet(TimerState)} which is never called from such
+     * transient states. Therefore, the implementation of {@code onTimerPenalty}
+     * should change only those properties of the listener that relate to a
+     * change in the penalties and leave other properties as they are. For
+     * example, if the timer is in a ready-to-start state and a "start cue"
+     * highlight has been applied to the timer text, that highlight should not
+     * be changed by the implementation of this method.
+     * </p>
+     *
+     * @param timerState
+     *     The state of the puzzle timer from which the penalties can be read.
+     */
     void onTimerPenalty(@NonNull TimerState timerState);
 
+    /**
+     * <p>
+     * Notifies the listener at the instant that a specific change has occurred
+     * in the state of the timer, or that a time-dependent "alarm" event has
+     * been triggered. "Alarm" events include notifications of the remaining
+     * inspection time, overrun of the inspection time when the countdown
+     * reaches zero, and the transition from a hold-to-start to a ready-to-start
+     * state.
+     * </p>
+     * <p>
+     * Most timer cues can fire only once during the life of a solve attempt.
+     * For example, say the inspection countdown reaches zero and a cue notifies
+     * that the inspection countdown has entered the overrun period. If the
+     * timer state is then saved and restored (e.g., because the orientation of
+     * the device has changed), the timer cue will not be notified again on
+     * restoration of the saved state. This is consistent with the expected
+     * uses of timer cues, such as sound effects or UI transitions. Such effects
+     * should only occur once when a timer state is first reached, not if that
+     * timer state is restored having been previously saved.
+     * </p>
+     *
+     * @param cue
+     *     The timer cue identifying the state change that has just occurred.
+     */
+    void onTimerCue(@NonNull TimerCue cue);
 }

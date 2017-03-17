@@ -180,7 +180,7 @@ public final class TTIntent {
      * contents of the database record that was verified to exist.
      */
     public static final String ACTION_SOLVE_VERIFIED
-        = ACTION_PREFIX + "ACTION_SOLVE_VERIFIED";
+        = ACTION_PREFIX + "SOLVE_VERIFIED";
 
     /**
      * One solve has <i>not</i> been verified to exist in the database. Either
@@ -190,7 +190,7 @@ public final class TTIntent {
      * when the verification was requested.
      */
     public static final String ACTION_SOLVE_NOT_VERIFIED
-        = ACTION_PREFIX + "ACTION_SOLVE_NOT_VERIFIED";
+        = ACTION_PREFIX + "SOLVE_NOT_VERIFIED";
 
     /**
      * Bootstrap the statistics loader, now that main state information is
@@ -254,32 +254,21 @@ public final class TTIntent {
         = ACTION_PREFIX + "GENERATE_SCRAMBLE_IMAGE";
 
     /**
-     * Selection mode has been turned on for the list of times. No intent
-     * extras are required.
+     * An item in the list of solve times has been selected or unselected, so
+     * the number of selected solves has changed. An integer intent extra gives
+     * the number of solves currently selected. The value can be retrieved by
+     * calling {@link #getSelectionCount(Intent)}.
      */
-    public static final String ACTION_SELECTION_MODE_ON
-        = ACTION_PREFIX + "SELECTION_MODE_ON";
+    public static final String ACTION_SOLVES_SELECTION_CHANGED
+        = ACTION_PREFIX + "SOLVE_SELECTION_CHANGED";
 
     /**
-     * Selection mode has been turned off for the list of times. No intent
-     * extras are required.
+     * The user has chosen an action to clear all selections in the list of
+     * solve times. The solves are not modified. The component responsible for
+     * managing the list should perform this action.
      */
-    public static final String ACTION_SELECTION_MODE_OFF
-        = ACTION_PREFIX + "SELECTION_MODE_OFF";
-
-    /**
-     * An item in the list of solve times has been selected. No intent extras
-     * are required.
-     */
-    public static final String ACTION_SOLVE_SELECTED
-        = ACTION_PREFIX + "SOLVE_SELECTED";
-
-    /**
-     * An item in the list of solve times has been unselected. No intent extras
-     * are required.
-     */
-    public static final String ACTION_SOLVE_UNSELECTED
-        = ACTION_PREFIX + "SOLVE_UNSELECTED";
+    public static final String ACTION_CLEAR_SELECTED_SOLVES
+        = ACTION_PREFIX + "CLEAR_SELECTED_SOLVES";
 
     /**
      * The user has chosen the action to delete all of the selected solve
@@ -337,6 +326,13 @@ public final class TTIntent {
     private static final String EXTRA_SOLVE_ID = EXTRA_PREFIX + "SOLVE_ID";
 
     /**
+     * The name of an intent extra that provides a count the solve times that
+     * are currently selected in a list.
+     */
+    private static final String EXTRA_SELECTION_COUNT
+        = EXTRA_PREFIX + "SELECTION_COUNT";
+
+    /**
      * The actions that are allowed under each category. The category name is
      * the key and the corresponding entry is a collection of action names that
      * are supported for that category. An action may be supported by more than
@@ -372,11 +368,9 @@ public final class TTIntent {
             });
 
         put(CATEGORY_UI_INTERACTIONS, new String[] {
-            ACTION_SOLVE_SELECTED,
-            ACTION_SOLVE_UNSELECTED,
+            ACTION_SOLVES_SELECTION_CHANGED,
+            ACTION_CLEAR_SELECTED_SOLVES,
             ACTION_DELETE_SELECTED_SOLVES,
-            ACTION_SELECTION_MODE_ON,
-            ACTION_SELECTION_MODE_OFF,
             ACTION_HIDE_TOOLBAR,
             ACTION_SHOW_TOOLBAR,
             ACTION_TOOLBAR_RESTORED,
@@ -767,6 +761,20 @@ public final class TTIntent {
     }
 
     /**
+     * Gets the count of currently selected solve times specified in an intent
+     * extra.
+     *
+     * @param intent
+     *     The intent from which to get the selection count.
+     *
+     * @return
+     *     The selection count, or zero if the intent does not specify a count.
+     */
+    public static int getSelectionCount(@NonNull Intent intent) {
+        return intent.getIntExtra(EXTRA_SELECTION_COUNT, 0);
+    }
+
+    /**
      * Creates a new broadcast builder for the given intent category and
      * action.
      *
@@ -872,12 +880,19 @@ public final class TTIntent {
                 }
                 break;
 
+            case ACTION_SOLVES_SELECTION_CHANGED:
+                // NOTE: If the extra is not present, "getSelectionCount()"
+                // returns zero, which could be a valid value, so check for
+                // the presence of the extra more directly.
+                if (!intent.hasExtra(EXTRA_SELECTION_COUNT)) {
+                    throw new IllegalArgumentException(
+                        "Missing selection count extra: " + intent);
+                }
+                break;
+
             case ACTION_ALGS_MODIFIED:
-            case ACTION_SOLVE_SELECTED:
-            case ACTION_SOLVE_UNSELECTED:
             case ACTION_DELETE_SELECTED_SOLVES:
-            case ACTION_SELECTION_MODE_ON:
-            case ACTION_SELECTION_MODE_OFF:
+            case ACTION_CLEAR_SELECTED_SOLVES:
             case ACTION_HIDE_TOOLBAR:
             case ACTION_SHOW_TOOLBAR:
             case ACTION_TOOLBAR_RESTORED:
@@ -1072,6 +1087,23 @@ public final class TTIntent {
          */
         public BroadcastBuilder solveID(long solveID) {
             mIntent.putExtra(EXTRA_SOLVE_ID, solveID);
+            return this;
+        }
+
+        /**
+         * Sets an optional extra that identifies the count of selected solves.
+         * The receiver can call {@link TTIntent#getSelectionCount(Intent)} to
+         * retrieve the count from the intent.
+         *
+         * @param selectionCount
+         *     The count of solve times that are currently selected.
+         *
+         * @return
+         *     {@code this} broadcast builder, allowing method calls to be
+         *     chained.
+         */
+        public BroadcastBuilder selectionCount(int selectionCount) {
+            mIntent.putExtra(EXTRA_SELECTION_COUNT, selectionCount);
             return this;
         }
     }

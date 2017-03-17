@@ -829,7 +829,6 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onUpdateSolveTime(@NonNull Solve solve) {
         TwistyTimer.getDBHandler().updateSolveAndNotifyAsync(solve);
-
     }
 
     @Override

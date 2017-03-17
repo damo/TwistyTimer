@@ -192,7 +192,6 @@
     <string name="scramble_text_size">Velikost textu zamíchání</string>
     <string name="scramble_text_size_summary">Upravuje velikost textu zamíchání ukazujícího se nad časovačem</string>
     <string name="scramble_text_tap_hint">Klikněte sem pro zobrazení zamíchání</string>
-    <string name="select_penalty">Vybrat penaltu</string>
     <string name="select_solve_type">Vybrat kategorii</string>
     <string name="selected_list">Vybráno</string>
     <string name="send_email_title">Poslat zpětnou vazbu s…</string>

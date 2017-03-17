@@ -80,8 +80,6 @@ public class TimerMainFragment extends BaseMainFragment
 
     private ActionMode mActionMode;
 
-    private int mSelectedSolvesCount = 0;
-
     private ActionMode.Callback actionModeCallback = new ActionMode.Callback() {
         // Called when the action mode is created; startActionMode() was called
         @Override
@@ -124,6 +122,8 @@ public class TimerMainFragment extends BaseMainFragment
         // Called when the user exits the action mode
         @Override
         public void onDestroyActionMode(ActionMode mode) {
+            mActionMode = null;
+            broadcast(CATEGORY_UI_INTERACTIONS, ACTION_CLEAR_SELECTED_SOLVES);
         }
     };
 
@@ -157,25 +157,28 @@ public class TimerMainFragment extends BaseMainFragment
                     });
                     break;
 
-                case ACTION_SELECTION_MODE_ON:
-                    mSelectedSolvesCount = 0;
-                    mActionMode = mvToolbar.startActionMode(actionModeCallback);
-                    break;
+                case ACTION_SOLVES_SELECTION_CHANGED:
+                    final int count = TTIntent.getSelectionCount(intent);
 
-                case ACTION_SELECTION_MODE_OFF:
-                    mSelectedSolvesCount = 0;
-                    if (mActionMode != null) {
-                        mActionMode.finish();
+                    if (count == 0) {
+                        if (mActionMode != null) {
+                            // The user cleared the selection manually without
+                            // explicitly exiting the action mode via its back
+                            // button. Exit the action mode now.
+                            mActionMode.finish();
+                        }
+                        // Else the user explicitly exited the action mode with
+                        // its back button, so the action mode was finished and
+                        // "onDestroyActionMode" reset "mActionMode" to null.
+                    } else {
+                        if (mActionMode == null) {
+                            mActionMode
+                                = mvToolbar.startActionMode(actionModeCallback);
+                        }
+                        mActionMode.setTitle(
+                            count + " " + getString(R.string .selected_list));
+
                     }
-                    break;
-
-                case ACTION_SOLVE_SELECTED:
-                case ACTION_SOLVE_UNSELECTED:
-                    mSelectedSolvesCount
-                        += intent.getAction().equals(ACTION_SOLVE_SELECTED)
-                           ?  1 : -1;
-                    mActionMode.setTitle(mSelectedSolvesCount + " "
-                                         + getString(R.string.selected_list));
                     break;
             }
         }

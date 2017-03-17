@@ -35,6 +35,32 @@ import com.aricneto.twistytimer.items.Solve;
  * presenting the rolled-back result for further editing.
  * </p>
  *
+ *
+ * <p>
+ * The {@code PuzzleTimer} manages the {@code Solve} instance during the life
+ * of a solve attempt and when (optionally) editing the solve result after the
+ * solve attempt ends. The {@code Solve} instance is saved and restored as
+ * necessary along with the rest of the puzzle timer's state information. This
+ * relieves the parent component of the need to manage the {@code Solve} as a
+ * separate element of its instance state. However, each time the parent
+ * component makes changes to the {@code Solve} (which will require a new
+ * {@code Solve} instance, as {@code Solve} instances are immutable), that
+ * change must be reported to {@link PuzzleTimer#onSolveChanged(Solve)}. The
+ * puzzle timer will then store this updated {@code Solve} and manage it as
+ * part of its own instance state.
+ * </p>
+ *
+ *
+ * <p>
+ * When {@link #onSolveStop(Solve)} is called, the solve can be saved. The save
+ * operation may be asynchronous and, if saving to a database, the {@code Solve}
+ * instance may be assigned a record ID when saving is complete. This change to
+ * the {@code Solve} must be notified to
+ * {@link PuzzleTimer#onSolveChanged(Solve)} to ensure that
+ * </p>
+ *
+ *
+ *
  * @author damo
  */
 public interface SolveHandler {
@@ -50,6 +76,17 @@ public interface SolveHandler {
     // appropriate.
 //    void onSolveEdited();
 
+    /**
+     * Notifies the listener that a solve attempt is ready to start and that
+     * the listener must create a new {@link Solve} instance that will hold the
+     * eventual result. The {@code Solve} must define the puzzle type, solve
+     * category and optional scramble sequence for the solve attempt. The solve
+     * time, any penalties incurred and the date-time stamp will be applied to
+     * the solve when the solve attempt ends and {@link #onSolveStop(Solve)}
+     * will be called to allow the solve to be saved.
+     *
+     * @return
+     */
     // Create new "Solve" recording puzzle type, category and scramble.
     @NonNull
     // FIXME: Document that the main reason why "PuzzleTimer" holds the "Solve"

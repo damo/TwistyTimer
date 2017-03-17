@@ -1,15 +1,15 @@
 package com.aricneto.twistytimer.timer;
 
 /**
- * An interface for components requiring regular refresh notifications while
- * a {@link PuzzleTimer} is running. Refresh notification are separate from
- * the UI cues and life-cycle events notified to a
- * {@link OnTimerEventListener}, as they are likely only to be relevant to a
- * widget displaying the current timer value, rather than to a higher-level
- * "controller" component that manages the wider user interface (e.g., a
- * fragment, or activity). This separation allows the "controller" to connect
- * the display widget directly to the {@link PuzzleTimer} without the need to
- * "relay" otherwise irrelevant refresh events from one to the other.
+ * An interface for components requiring regular refresh notifications while a
+ * {@link PuzzleTimer} is running. Refresh notification are separate from the
+ * UI cues and life-cycle events notified to a {@link OnTimerEventListener}, as
+ * they are likely only to be relevant to a widget displaying the current timer
+ * value, rather than to a higher-level "controller" component that manages the
+ * wider user interface (e.g., a fragment, or activity). This separation allows
+ * the "controller" to connect the display widget directly to the puzzle timer
+ * without the need to "relay" otherwise irrelevant refresh events from one to
+ * the other.
  *
  * @author damo
  */
@@ -19,8 +19,8 @@ package com.aricneto.twistytimer.timer;
 public interface OnTimerRefreshListener {
     /**
      * <p>
-     * Notifies the listener that the display of the elapsed solve time
-     * should be refreshed to display the up-to-date value.
+     * Notifies the listener that the display of the elapsed solve time should
+     * be refreshed to display the up-to-date value.
      * </p>
      * <p>
      * The target of this refresh notification can feed back its own

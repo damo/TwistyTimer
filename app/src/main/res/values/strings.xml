@@ -42,12 +42,22 @@
     <string name="list_options_item_share">Share</string>
     <string name="task_remove">Remove</string>
 
+    <string name="edit_penalties_inspection_label">Inspection:</string>
+    <string name="edit_penalties_solve_label">Solve:</string>
+    <!--
+    These are used for the edit penalties dialog and the quick-action buttons
+    on the time fragment.
+    -->
+    <string name="edit_penalties_plus_dnf" translatable="false">+DNF</string>
+    <string name="edit_penalties_minus_dnf" translatable="false">-DNF</string>
+    <string name="edit_penalties_plus_2" translatable="false">+2s</string>
+    <string name="edit_penalties_minus_2" translatable="false">-2s</string>
+
     <string name="action_cancel">Cancel</string>
     <string name="detail_text_plus">Ao3:\nAo5:\nAo12:\nAo50:\nAo100:\nAo1000:\nMean:\nBest:\nWorst:\nCount:</string>
     <string name="delete_dialog_confirmation_title">Remove solve?</string>
     <string name="delete_dialog_confirmation_button">Remove</string>
     <string name="delete_dialog_cancel_button">Cancel</string>
-    <string name="select_penalty">Select penalty</string>
     <string name="inspection">Inspection</string>
     <string name="add_time">Add time</string>
     <string name="add_time_hint" translatable="false">1:23.45</string>

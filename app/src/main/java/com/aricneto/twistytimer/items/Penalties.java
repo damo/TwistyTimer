@@ -3,6 +3,8 @@ package com.aricneto.twistytimer.items;
 import android.support.annotation.CheckResult;
 import android.support.annotation.Nullable;
 
+import com.aricneto.twistytimer.utils.TimeUtils;
+
 /**
  * <p>
  * A collection of penalties that can be encoded to a single integer. The

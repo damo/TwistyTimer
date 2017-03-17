@@ -214,10 +214,16 @@ public class TimerListFragment extends BaseMainFragment
         = new TTFragmentBroadcastReceiver(this, CATEGORY_UI_INTERACTIONS) {
         @Override
         public void onReceiveWhileAdded(Context context, Intent intent) {
+            TTIntent.validate(intent);
+
             switch (intent.getAction()) {
                 case ACTION_DELETE_SELECTED_SOLVES:
                     // Operation will delete times and then broadcast an intent.
                     timeCursorAdapter.deleteAllSelected();
+                    break;
+
+                case ACTION_CLEAR_SELECTED_SOLVES:
+                    timeCursorAdapter.unselectAll(recyclerView);
                     break;
             }
         }

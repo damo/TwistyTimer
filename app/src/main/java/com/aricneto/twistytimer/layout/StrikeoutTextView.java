@@ -31,9 +31,11 @@ import com.aricneto.twistify.R;
  * <p>
  * When checked, the strike-out "X" is drawn using strokes along the diagonals
  * of the text view's padded region (less a little extra vertical space above
- * and below), not the bounding box of the drawn text. The stroke width of the
- * "X" is set automatically based on the text size set on the view. A wider
- * stroke is used if a bold typeface is used.
+ * and below), not the bounding box of the drawn text. It may be preferable to
+ * set the {@code android:layout_width} attribute to {@code wrap_content} to
+ * ensure the "X" aligns with the text. The stroke width of the "X" is set
+ * automatically based on the text size set on the view and is increased if a
+ * bold typeface is used.
  * </p>
  *
  * @author damo
@@ -102,18 +104,6 @@ public class StrikeoutTextView extends TextView implements Checkable {
             return;
         }
 
-        final float l = getPaddingLeft();
-        final float tt = getPaddingTop();
-        final float r = getWidth() - getPaddingRight();
-        final float bb = getHeight() - getPaddingBottom();
-
-        // It looks better if the "X" is not drawn to the full height of the
-        // padded region. Insetting more at the top than the bottom also looks
-        // better (at least for the use case in this app).
-        final float inset = (bb - tt) / 10f;
-        final float t = tt + inset * 1.5f;
-        final float b = bb - inset;
-
         // The "Typeface" may have a bold variant, but if the "bold" attribute
         // is set and the typeface has no such variant, then "TextView" will
         // turn on "fake bold". Therefore, check both possibilities. The stroke
@@ -122,12 +112,31 @@ public class StrikeoutTextView extends TextView implements Checkable {
         final float strokeScale
             = textPaint.isFakeBoldText() || textPaint.getTypeface().isBold()
                 ? 0.13f : 0.09f;
+        final float strokeWidth
+            = Math.max(1f, textPaint.getTextSize() * strokeScale);
 
-        mStrikeoutPaint.setStrokeWidth(
-            Math.max(1f, textPaint.getTextSize() * strokeScale));
+        mStrikeoutPaint.setStrokeWidth(strokeWidth);
 
-        canvas.drawLine(l, t, r, b, mStrikeoutPaint);
-        canvas.drawLine(r, t, l, b, mStrikeoutPaint);
+        // NOTE: Perhaps "getClipBounds" could be used here instead.
+        final float ll = getPaddingLeft();
+        final float tt = getPaddingTop();
+        final float rr = getWidth() - getPaddingRight();
+        final float bb = getHeight() - getPaddingBottom();
+
+        // It looks better if the "X" is not drawn to the full height of the
+        // padded region. Insetting more at the top than the bottom also looks
+        // better (at least for the use case in this app). Use half the stroke
+        // width as the minimum inset on all sides to avoid clipping the end
+        // cap of the stroke.
+        final float strokeInset = strokeWidth / 2f;
+        final float inset = Math.max(strokeInset, (bb - tt) / 10f);
+        final float l = ll + strokeInset;
+        final float t = tt + inset * 1.5f;
+        final float r = rr - strokeInset;
+        final float b = bb - inset;
+
+        canvas.drawLine(l, t, r, b, mStrikeoutPaint); // "\" diagonal
+        canvas.drawLine(r, t, l, b, mStrikeoutPaint); // "/" diagonal
     }
 
     /**

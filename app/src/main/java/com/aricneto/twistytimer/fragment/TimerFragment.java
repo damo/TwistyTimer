@@ -1178,11 +1178,18 @@ public class TimerFragment extends BaseMainFragment
         // and one when the timer is stopped (or cancelled). The state of the
         // UI is mostly managed from "onTimerSet", but there are a few
         // transitions and other actions that are managed from "onTimerCue".
+        // Much more use of "onTimerCue" is made by the "TimerView" class.
 
-        // TODO: If adding sound effects, it may be neater to create a separate
-        // sound effects class that implements "OnTimerEventListener" and then
-        // add an instance to the "PuzzleTimer" as another listener for cues.
-        // For an on/off switch: just add/remove that listener.
+        // TODO: To add sound effects, create a separate sound effects class
+        // that implements "OnTimerEventListener" and then add an instance to
+        // the "PuzzleTimer" as another listener for cues along with the other
+        // "OnTimerEventListener" instances added in "onActivityCreated()" (in
+        // the same manner as the "OnTimerEventLogger" class).
+        //
+        // TODO: For a sound effects on/off switch, just add/remove that
+        // listener based on a corresponding sound effects preference (which
+        // would then suggest that the add/remove belongs in "onStart()" along
+        // with the other settings that are controlled by shared preferences).
 
         switch (cue) {
             case CUE_INSPECTION_HOLDING_FOR_START:
@@ -1208,10 +1215,8 @@ public class TimerFragment extends BaseMainFragment
             case CUE_INSPECTION_TIME_OUT:
                 // For now, nothing special is done for these cues (though
                 // the timer display may do something if it wants). Perhaps
-                // play an audible cue. NOTE: If playing audio, it might be
-                // simpler to create a separate "SoundEffects" class that
-                // implements "OnTimerEventListener" and "onTimerCue()". Then
-                // add an instance to the "PuzzleTimer" as another listener.
+                // play an audible cue (see the comments above about the best
+                // way to integrate support for sound effects).
                 break;
 
             case CUE_SOLVE_STARTED:
@@ -1228,6 +1233,12 @@ public class TimerFragment extends BaseMainFragment
                 // stage, so toast would just be confusing, as the user will
                 // probably not consider a "too-short hold" to be announced as
                 // as, "Timer cancelled!"
+
+                // FIXME: Actually, the only time cancelling is fired is either
+                // when a hold-to-start terminates too early or if "cancel()" is
+                // called explicitly on the timer. The latter only occurs if the
+                // "Back" button is pressed, so that would be a better place to
+                // show the toast.
                 break;
 
             case CUE_STOPPING:
@@ -1850,16 +1861,18 @@ public class TimerFragment extends BaseMainFragment
         // view: as it changes from "+DNF" to "-DNF", there is a slight change
         // to its width which makes the UI look a bit jumpy. It would probably
         // be too cramped if separate "+DNF" and "-DNF" buttons were added. Can
-        // the width be fixed?
+        // a fixed width be set that would accommodate changes to the text?
+        // Perhaps there is a layout that can manage that, or a custom layout
+        // could be written.
         if (p.canIncurPostStartPenalty(Penalty.DNF)) {
             // A post-start DNF can be incurred. Show "+DNF" and clear the tag.
-            mvDNFButton.setText("+DNF");
+            mvDNFButton.setText(R.string.edit_penalties_plus_dnf);
             mvDNFButton.setEnabled(isVerified);
             mvDNFButton.setTag(null);
         } else if (p.canAnnulPostStartPenalty(Penalty.DNF)) {
             // This DNF can be annulled. Show "-DNF" and tag as "ANNUL_DNF", so
             // the click handler will know which way to "toggle" the DNF.
-            mvDNFButton.setText("-DNF");
+            mvDNFButton.setText(R.string.edit_penalties_minus_dnf);
             mvDNFButton.setEnabled(isVerified);
             mvDNFButton.setTag(ANNUL_DNF);
         } else {
@@ -1869,7 +1882,7 @@ public class TimerFragment extends BaseMainFragment
             // but disable the button.
             // FIXME: Might be better to strike this out, or something like
             // that. Just disabling it might be confusing.
-            mvDNFButton.setText("-DNF");
+            mvDNFButton.setText(R.string.edit_penalties_minus_dnf);
             mvDNFButton.setEnabled(false);
             mvDNFButton.setTag(ANNUL_DNF);
         }
